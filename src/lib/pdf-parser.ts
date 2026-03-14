@@ -1,3 +1,4 @@
+// @ts-ignore - pdfjs-dist types have internal TS issues
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Use CDN worker
