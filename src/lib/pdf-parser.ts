@@ -1,6 +1,7 @@
+// @ts-ignore - pdfjs-dist types have internal TS issues
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use CDN worker
+// Use CDN worker matching installed version
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
 
 export async function extractTextFromPDF(file: File): Promise<string> {
@@ -11,12 +12,59 @@ export async function extractTextFromPDF(file: File): Promise<string> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const strings = content.items
-      .filter(item => 'str' in item)
-      .map(item => (item as { str: string }).str);
-    fullText += strings.join(' ') + '\n';
+
+    // Group text items by Y coordinate to reconstruct lines
+    const itemsByY: Map<number, Array<{ x: number; str: string }>> = new Map();
+    const Y_TOLERANCE = 3; // items within 3 units are on the same line
+
+    for (const item of content.items) {
+      if (!('str' in item) || !(item as any).transform) continue;
+      const textItem = item as { str: string; transform: number[] };
+      if (!textItem.str.trim() && !textItem.str.includes(' ')) continue;
+
+      const x = textItem.transform[4];
+      const y = Math.round(textItem.transform[5]);
+
+      // Find existing Y bucket within tolerance
+      let foundY: number | null = null;
+      for (const existingY of itemsByY.keys()) {
+        if (Math.abs(existingY - y) <= Y_TOLERANCE) {
+          foundY = existingY;
+          break;
+        }
+      }
+
+      const bucketY = foundY ?? y;
+      if (!itemsByY.has(bucketY)) itemsByY.set(bucketY, []);
+      itemsByY.get(bucketY)!.push({ x, str: textItem.str });
+    }
+
+    // Sort by Y descending (PDF coordinates: top = higher Y)
+    const sortedYs = [...itemsByY.keys()].sort((a, b) => b - a);
+
+    for (const y of sortedYs) {
+      const items = itemsByY.get(y)!;
+      // Sort by X ascending (left to right)
+      items.sort((a, b) => a.x - b.x);
+
+      // Join with appropriate spacing
+      let line = '';
+      for (let j = 0; j < items.length; j++) {
+        if (j > 0) {
+          const gap = items[j].x - (items[j - 1].x + items[j - 1].str.length * 4);
+          line += gap > 20 ? '  ' : ' ';
+        }
+        line += items[j].str;
+      }
+
+      const trimmed = line.trim();
+      if (trimmed.length > 0) {
+        fullText += trimmed + '\n';
+      }
+    }
   }
 
+  console.log('[PDF Parser] Extracted text:\n', fullText);
   return fullText;
 }
 
