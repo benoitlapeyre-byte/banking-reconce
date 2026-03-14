@@ -83,7 +83,7 @@ export function parseTransactions(text: string): Array<{
     const amount = amounts[amounts.length - 1];
 
     // Extract label: everything before the first amount occurrence
-    const firstAmountMatch = rest.match(/\d[\d\s]*[.,]\d{2}/);
+    const firstAmountMatch = rest.match(/\d{1,3}(?:\s\d{3})*[.,]\d{2}/);
     const label = firstAmountMatch
       ? rest.substring(0, firstAmountMatch.index).trim()
       : rest.trim();
