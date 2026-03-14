@@ -71,7 +71,7 @@ export function parseTransactions(text: string): Array<{
     // Find all amounts in the remaining text
     const amounts: number[] = [];
     let match: RegExpExecArray | null;
-    const amountRe = /(\d[\d\s]*[.,]\d{2})/g;
+    const amountRe = /(\d{1,3}(?:\s\d{3})*[.,]\d{2})/g;
     while ((match = amountRe.exec(rest)) !== null) {
       const val = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
       if (!isNaN(val)) amounts.push(val);
