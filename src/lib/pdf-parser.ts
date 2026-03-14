@@ -34,9 +34,9 @@ export function parseTransactions(text: string): Array<{
   // Date patterns: DD/MM/YYYY, DD.MM.YYYY, DD/MM, DD.MM
   const datePattern = /^(\d{2}[\/\.]\d{2}(?:[\/\.]\d{2,4})?)/;
 
-  // Amount pattern: handles space-separated thousands like "1 170,00" or "847,12"
-  // Captures amounts that may appear anywhere on the line
-  const amountPattern = /(\d[\d\s]*[.,]\d{2})/g;
+  // Amount pattern: structured French format like "1 170,00" or "847,12"
+  // \d{1,3} followed by optional groups of space+3digits, then comma/dot + 2 decimals
+  const amountPattern = /(\d{1,3}(?:\s\d{3})*[.,]\d{2})/g;
 
   // Skip lines that look like headers, totals, or balance lines
   const skipPatterns = [
