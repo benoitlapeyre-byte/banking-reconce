@@ -62,10 +62,8 @@ export interface ReconciliationResult {
  * Try to auto-match a receipt with pending transactions.
  * Returns the best match or null.
  */
-export function autoReconcile(
-  receipt: Receipt,
-  transactions: Transaction[]
-): ReconciliationResult {
+import { Transaction, Receipt, PersonalExpense } from './types';
+
   const pendingTxs = transactions.filter(t => t.status === 'pending');
   if (pendingTxs.length === 0) {
     return { receiptId: receipt.id, transactionId: null, confidence: 'none', note: 'Aucune transaction en attente' };
