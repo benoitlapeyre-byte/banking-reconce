@@ -52,8 +52,8 @@ export function useLedger() {
     return receipt;
   }, []);
 
-  // Auto-reconcile: try to match a receipt with pending transactions
-  const addReceiptWithAutoReconcile = useCallback((file: File) => {
+  // Auto-reconcile: try to match a receipt with pending transactions, then try personal expense
+  const addReceiptWithAutoReconcile = useCallback((file: File): 'matched' | 'personal-auto' | 'unrecognized' => {
     const receipt: Receipt = {
       id: generateId(),
       name: file.name,
@@ -64,12 +64,14 @@ export function useLedger() {
 
     setReceipts(prev => [...prev, receipt]);
 
-    // Run auto-reconciliation against current transactions
+    // First: try to match against bank transactions
+    let bankMatchResult: ReturnType<typeof autoReconcile> | null = null;
+    
     setTransactions(prev => {
       const result = autoReconcile(receipt, prev);
+      bankMatchResult = result;
 
       if (result.transactionId && result.confidence === 'high') {
-        // Update receipt linkage
         receipt.linkedTransactionId = result.transactionId;
         setReceipts(r => r.map(rc =>
           rc.id === receipt.id ? { ...rc, linkedTransactionId: result.transactionId! } : rc
@@ -87,13 +89,39 @@ export function useLedger() {
             ? { ...t, reconciliationNote: result.note }
             : t
         );
-      } else {
-        toast.warning(`⚠️ ${file.name}: ${result.note}`);
-        return prev;
       }
+      return prev;
     });
 
-    return receipt;
+    // If matched a bank transaction, done
+    if (bankMatchResult && (bankMatchResult as any).confidence !== 'none') {
+      return 'matched';
+    }
+
+    // Second: try to auto-create a personal expense from filename
+    const expenseInfo = extractPersonalExpenseFromFilename(file.name);
+    if (expenseInfo && expenseInfo.amount && expenseInfo.merchant) {
+      const newExpense: PersonalExpense = {
+        id: generateId(),
+        merchant: expenseInfo.merchant,
+        amount: expenseInfo.amount,
+        date: expenseInfo.date || new Date().toISOString().slice(0, 10),
+        receiptId: receipt.id,
+        note: 'Auto-détecté depuis le justificatif',
+        createdAt: new Date().toISOString(),
+      };
+      setPersonalExpenses(prev => [...prev, newExpense]);
+      toast.success(`💰 Dépense personnelle détectée: ${newExpense.merchant}`, {
+        description: `${newExpense.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} — ${newExpense.date}`,
+      });
+      return 'personal-auto';
+    }
+
+    // Nothing recognized
+    toast.warning(`⚠️ ${file.name}: non reconnu`, {
+      description: 'Aucune correspondance bancaire ni dépense personnelle détectée. Ajoutez manuellement.',
+    });
+    return 'unrecognized';
   }, []);
 
   const linkReceiptToTransaction = useCallback((receiptId: string, transactionId: string) => {
