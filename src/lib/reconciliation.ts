@@ -1,4 +1,4 @@
-import { Transaction, Receipt } from './types';
+import { Transaction, Receipt, PersonalExpense } from './types';
 
 /**
  * Extract potential amounts from a receipt filename.

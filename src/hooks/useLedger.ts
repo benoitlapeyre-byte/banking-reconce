@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Transaction, Receipt, PersonalExpense, FilterStatus } from '@/lib/types';
 import { loadTransactions, saveTransactions, loadPersonalExpenses, savePersonalExpenses, generateId } from '@/lib/store';
 import { extractStructuredLines, parseTransactionsFromLines } from '@/lib/pdf-parser';
-import { autoReconcile } from '@/lib/reconciliation';
+import { autoReconcile, extractPersonalExpenseFromFilename } from '@/lib/reconciliation';
 import { toast } from 'sonner';
 
 export function useLedger() {
