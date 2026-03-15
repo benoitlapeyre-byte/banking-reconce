@@ -1,12 +1,15 @@
-export type TransactionStatus = 'pending' | 'matched' | 'personal';
+export type TransactionType = 'credit' | 'debit';
+export type TransactionStatus = 'pending' | 'matched' | 'auto-matched' | 'personal';
 
 export interface Transaction {
   id: string;
   date: string;
   label: string;
   amount: number;
+  type: TransactionType;
   status: TransactionStatus;
   receiptId?: string;
+  reconciliationNote?: string;
   raw: string;
 }
 
@@ -29,4 +32,4 @@ export interface PersonalExpense {
   createdAt: string;
 }
 
-export type FilterStatus = 'all' | 'pending' | 'matched' | 'personal';
+export type FilterStatus = 'all' | 'pending' | 'matched' | 'auto-matched' | 'credit' | 'debit';

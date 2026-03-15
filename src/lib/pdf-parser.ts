@@ -1,21 +1,31 @@
 // @ts-ignore - pdfjs-dist types have internal TS issues
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use CDN worker matching installed version
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
 
-export async function extractTextFromPDF(file: File): Promise<string> {
+interface TextItem {
+  str: string;
+  x: number;
+  y: number;
+}
+
+interface StructuredLine {
+  y: number;
+  items: TextItem[];
+  text: string;
+}
+
+export async function extractStructuredLines(file: File): Promise<StructuredLine[]> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = '';
+  const allLines: StructuredLine[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
 
-    // Group text items by Y coordinate to reconstruct lines
-    const itemsByY: Map<number, Array<{ x: number; str: string }>> = new Map();
-    const Y_TOLERANCE = 3; // items within 3 units are on the same line
+    const itemsByY: Map<number, TextItem[]> = new Map();
+    const Y_TOLERANCE = 3;
 
     for (const item of content.items) {
       if (!('str' in item) || !(item as any).transform) continue;
@@ -25,7 +35,6 @@ export async function extractTextFromPDF(file: File): Promise<string> {
       const x = textItem.transform[4];
       const y = Math.round(textItem.transform[5]);
 
-      // Find existing Y bucket within tolerance
       let foundY: number | null = null;
       for (const existingY of itemsByY.keys()) {
         if (Math.abs(existingY - y) <= Y_TOLERANCE) {
@@ -36,18 +45,15 @@ export async function extractTextFromPDF(file: File): Promise<string> {
 
       const bucketY = foundY ?? y;
       if (!itemsByY.has(bucketY)) itemsByY.set(bucketY, []);
-      itemsByY.get(bucketY)!.push({ x, str: textItem.str });
+      itemsByY.get(bucketY)!.push({ str: textItem.str, x, y });
     }
 
-    // Sort by Y descending (PDF coordinates: top = higher Y)
     const sortedYs = [...itemsByY.keys()].sort((a, b) => b - a);
 
     for (const y of sortedYs) {
       const items = itemsByY.get(y)!;
-      // Sort by X ascending (left to right)
       items.sort((a, b) => a.x - b.x);
 
-      // Join with appropriate spacing
       let line = '';
       for (let j = 0; j < items.length; j++) {
         if (j > 0) {
@@ -59,34 +65,43 @@ export async function extractTextFromPDF(file: File): Promise<string> {
 
       const trimmed = line.trim();
       if (trimmed.length > 0) {
-        fullText += trimmed + '\n';
+        allLines.push({ y, items, text: trimmed });
       }
     }
   }
 
-  console.log('[PDF Parser] Extracted text:\n', fullText);
-  return fullText;
+  console.log('[PDF Parser] Extracted lines:', allLines.map(l => l.text));
+  return allLines;
 }
 
-// Heuristic parser for French bank statements (Crédit Agricole, etc.)
-// Supports: DD/MM/YYYY, DD.MM.YYYY, DD.MM, DD/MM formats
-export function parseTransactions(text: string): Array<{
+// Detect debit/credit column X positions from header
+function detectColumns(lines: StructuredLine[]): { debitX: number; creditX: number } | null {
+  for (const line of lines) {
+    const debitItem = line.items.find(it => /d[eé]bit/i.test(it.str));
+    const creditItem = line.items.find(it => /cr[eé]dit/i.test(it.str));
+    if (debitItem && creditItem) {
+      console.log('[PDF Parser] Detected columns - Débit X:', debitItem.x, 'Crédit X:', creditItem.x);
+      return { debitX: debitItem.x, creditX: creditItem.x };
+    }
+  }
+  return null;
+}
+
+export type ParsedTransaction = {
   date: string;
   label: string;
   amount: number;
+  type: 'credit' | 'debit';
   raw: string;
-}> {
-  const lines = text.split('\n').filter(l => l.trim().length > 0);
-  const transactions: Array<{ date: string; label: string; amount: number; raw: string }> = [];
+};
 
-  // Date patterns: DD/MM/YYYY, DD.MM.YYYY, DD/MM, DD.MM
+export function parseTransactionsFromLines(lines: StructuredLine[]): ParsedTransaction[] {
+  const columns = detectColumns(lines);
+  const transactions: ParsedTransaction[] = [];
+
   const datePattern = /^(\d{2}[\/\.]\d{2}(?:[\/\.]\d{2,4})?)/;
-
-  // Amount pattern: structured French format like "1 170,00" or "847,12"
-  // \d{1,3} followed by optional groups of space+3digits, then comma/dot + 2 decimals
   const amountPattern = /(\d{1,3}(?:\s\d{3})*[.,]\d{2})/g;
 
-  // Skip lines that look like headers, totals, or balance lines
   const skipPatterns = [
     /total\s+des\s+op/i,
     /nouveau\s+solde/i,
@@ -98,9 +113,7 @@ export function parseTransactions(text: string): Array<{
   ];
 
   for (const line of lines) {
-    const trimmed = line.trim();
-
-    // Skip header/total/balance lines
+    const trimmed = line.text.trim();
     if (skipPatterns.some(p => p.test(trimmed))) continue;
 
     const dateMatch = trimmed.match(datePattern);
@@ -108,15 +121,13 @@ export function parseTransactions(text: string): Array<{
 
     const date = dateMatch[1];
 
-    // Remove the leading date(s) — there may be two (date opé + date valeur)
     let rest = trimmed.substring(dateMatch[0].length).trim();
-    // Remove second date if present (e.g., "19.01 19.01 ...")
     const secondDate = rest.match(/^(\d{2}[\/\.]\d{2}(?:[\/\.]\d{2,4})?)\s+/);
     if (secondDate) {
       rest = rest.substring(secondDate[0].length).trim();
     }
 
-    // Find all amounts in the remaining text
+    // Find amounts in remaining text
     const amounts: number[] = [];
     let match: RegExpExecArray | null;
     const amountRe = /(\d{1,3}(?:\s\d{3})*[.,]\d{2})/g;
@@ -127,22 +138,73 @@ export function parseTransactions(text: string): Array<{
 
     if (amounts.length === 0) continue;
 
-    // The amount is typically the last (or only) number
     const amount = amounts[amounts.length - 1];
 
-    // Extract label: everything before the first amount occurrence
+    // Determine type from column position
+    let type: 'credit' | 'debit' = 'debit'; // default
+    if (columns) {
+      // Find the text item containing the amount value
+      const amountStr = amounts[amounts.length - 1].toString().replace('.', ',');
+      const COLUMN_TOLERANCE = 80;
+      
+      for (const item of line.items) {
+        const cleanStr = item.str.replace(/\s/g, '');
+        if (cleanStr.includes(amountStr.replace(/\s/g, '')) || 
+            /\d/.test(cleanStr) && Math.abs(item.x - columns.creditX) < COLUMN_TOLERANCE) {
+          // Check if this numeric item is closer to credit or debit column
+          const distToDebit = Math.abs(item.x - columns.debitX);
+          const distToCredit = Math.abs(item.x - columns.creditX);
+          if (/\d{2,}/.test(cleanStr) && distToCredit < distToDebit) {
+            type = 'credit';
+          }
+        }
+      }
+
+      // More reliable: check X position of rightmost numeric items
+      const numericItems = line.items.filter(it => /\d{1,3}(?:\s?\d{3})*[.,]\d{2}/.test(it.str.replace(/\s/g, '')) || /^\d[\d\s]*$/.test(it.str.trim()));
+      if (numericItems.length > 0) {
+        // Get the rightmost cluster of numeric items (the amount)
+        const rightmostNumeric = numericItems.reduce((max, it) => it.x > max.x ? it : max, numericItems[0]);
+        const distToDebit = Math.abs(rightmostNumeric.x - columns.debitX);
+        const distToCredit = Math.abs(rightmostNumeric.x - columns.creditX);
+        type = distToCredit < distToDebit ? 'credit' : 'debit';
+      }
+    }
+
+    // Extract label
     const firstAmountMatch = rest.match(/\d{1,3}(?:\s\d{3})*[.,]\d{2}/);
     const label = firstAmountMatch
       ? rest.substring(0, firstAmountMatch.index).trim()
       : rest.trim();
 
-    // Clean label: remove trailing special chars like ¨
     const cleanLabel = label.replace(/[¨þ]/g, '').trim();
 
     if (cleanLabel.length > 0 && amount > 0) {
-      transactions.push({ date, label: cleanLabel, amount, raw: trimmed });
+      transactions.push({ date, label: cleanLabel, amount, type, raw: trimmed });
     }
   }
 
+  console.log('[PDF Parser] Parsed transactions:', transactions);
   return transactions;
+}
+
+// Legacy wrapper for backward compatibility
+export async function extractTextFromPDF(file: File): Promise<string> {
+  const lines = await extractStructuredLines(file);
+  return lines.map(l => l.text).join('\n');
+}
+
+export function parseTransactions(text: string): Array<{
+  date: string;
+  label: string;
+  amount: number;
+  raw: string;
+}> {
+  // This is the legacy function - new code should use parseTransactionsFromLines
+  const lines = text.split('\n').filter(l => l.trim().length > 0);
+  return parseTransactionsFromLines(lines.map((text, i) => ({
+    y: i,
+    items: [{ str: text, x: 0, y: i }],
+    text,
+  })));
 }

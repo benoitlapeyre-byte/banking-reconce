@@ -6,7 +6,7 @@ import { TransactionTable } from '@/components/TransactionTable';
 import { DetailPanel } from '@/components/DetailPanel';
 import { PersonalExpensePanel } from '@/components/PersonalExpensePanel';
 import { PersonalExpenseList } from '@/components/PersonalExpenseList';
-import { Upload, Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { Upload, Plus, Trash2, AlertTriangle, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Index = () => {
@@ -30,9 +30,8 @@ const Index = () => {
 
   const handleImportReceipts = (files: File[]) => {
     for (const file of files) {
-      ledger.addReceipt(file);
+      ledger.addReceiptWithAutoReconcile(file);
     }
-    toast.success(`${files.length} justificatif(s) ajouté(s)`);
   };
 
   const isEmpty = ledger.allTransactions.length === 0 && ledger.personalExpenses.length === 0;
@@ -41,13 +40,11 @@ const Index = () => {
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <aside className="w-[280px] border-r flex flex-col flex-shrink-0">
-        {/* Brand */}
         <div className="px-5 py-4 border-b">
           <h1 className="text-lg font-semibold tracking-tight">Ledge</h1>
           <p className="text-[10px] text-muted-foreground mt-0.5">Réconciliation locale</p>
         </div>
 
-        {/* Filters */}
         <div className="px-2 py-3 flex-1">
           <SidebarFilter
             filter={ledger.filter}
@@ -55,7 +52,6 @@ const Index = () => {
             stats={ledger.stats}
           />
 
-          {/* Stats */}
           {!isEmpty && (
             <div className="mt-6 px-3 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Résumé</p>
@@ -64,13 +60,23 @@ const Index = () => {
                   <span className="text-muted-foreground">En attente</span>
                   <span className="font-mono font-medium">{ledger.stats.pending}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">À justifier</span>
-                  <span className="font-mono font-medium">
-                    {ledger.stats.pendingAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <ArrowDownLeft className="h-3 w-3 text-primary" /> Crédits
+                  </span>
+                  <span className="font-mono font-medium text-primary">
+                    +{ledger.stats.creditAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
                   </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <ArrowUpRight className="h-3 w-3 text-destructive" /> Débits
+                  </span>
+                  <span className="font-mono font-medium text-destructive">
+                    −{ledger.stats.debitAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                  </span>
+                </div>
+                <div className="flex justify-between border-t pt-1.5 mt-1.5">
                   <span className="text-muted-foreground">Justificatifs libres</span>
                   <span className="font-mono font-medium">{ledger.stats.unmatchedReceipts}</span>
                 </div>
@@ -79,7 +85,6 @@ const Index = () => {
           )}
         </div>
 
-        {/* Warning */}
         <div className="px-3 py-3 border-t">
           <div className="flex gap-2 items-start text-[10px] text-muted-foreground">
             <AlertTriangle className="h-3 w-3 flex-shrink-0 mt-0.5" />
@@ -90,13 +95,12 @@ const Index = () => {
 
       {/* Main */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="flex items-center justify-between px-5 py-3 border-b flex-shrink-0">
           <div>
             <p className="text-sm font-medium">
               {ledger.stats.pending > 0
-                ? `${ledger.stats.pending} transaction${ledger.stats.pending > 1 ? 's' : ''} en attente`
-                : isEmpty ? 'Aucune donnée' : 'Toutes les transactions sont justifiées'}
+                ? `${ledger.stats.pending} transaction${ledger.stats.pending > 1 ? 's' : ''} en attente de justificatif`
+                : isEmpty ? 'Aucune donnée' : 'Toutes les transactions sont justifiées ✓'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -135,46 +139,43 @@ const Index = () => {
           </div>
         </header>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center h-full px-8 max-w-lg mx-auto gap-6">
               <div className="text-center">
-                <h2 className="text-lg font-semibold mb-1">Réconciliation locale</h2>
+                <h2 className="text-lg font-semibold mb-1">Réconciliation bancaire</h2>
                 <p className="text-sm text-muted-foreground">
-                  Aucune donnée ne quitte votre navigateur.
+                  Importez un relevé puis ajoutez des justificatifs — le rapprochement se fait automatiquement par montant.
                 </p>
               </div>
               <div className="w-full space-y-4">
                 <Dropzone
                   onDrop={handleImportStatement}
                   accept=".pdf"
-                  label="Importer un relevé bancaire"
+                  label="1. Importer un relevé bancaire"
                   sublabel="Glissez un PDF ou cliquez pour sélectionner"
                 />
                 <Dropzone
                   onDrop={handleImportReceipts}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
-                  label="Importer des justificatifs"
-                  sublabel="Factures, tickets, reçus — PDF ou images"
+                  label="2. Importer des justificatifs"
+                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170.pdf)"
                   compact
                 />
               </div>
             </div>
           ) : (
             <div className="space-y-4 pb-8">
-              {/* Receipt dropzone */}
               <div className="px-5 pt-4">
                 <Dropzone
                   onDrop={handleImportReceipts}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
-                  label="Ajouter des justificatifs"
-                  sublabel="Glissez des factures, tickets ou reçus"
+                  label="Ajouter des justificatifs (rapprochement auto par montant)"
+                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170.pdf)"
                   compact
                 />
               </div>
 
-              {/* Transaction table */}
               <div className="px-5">
                 <TransactionTable
                   transactions={ledger.transactions}
@@ -186,7 +187,6 @@ const Index = () => {
                 />
               </div>
 
-              {/* Personal expenses */}
               {ledger.personalExpenses.length > 0 && (
                 <div className="px-5">
                   <PersonalExpenseList
@@ -199,7 +199,6 @@ const Index = () => {
           )}
         </div>
 
-        {/* Processing indicator */}
         {ledger.isProcessing && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-accent text-accent-foreground px-4 py-2 rounded-sm text-xs font-medium shadow-card">
             Analyse du relevé en cours...
@@ -207,7 +206,6 @@ const Index = () => {
         )}
       </main>
 
-      {/* Detail Panel */}
       <DetailPanel
         transaction={ledger.selectedTransaction}
         receipts={ledger.receipts}
@@ -216,7 +214,6 @@ const Index = () => {
         onLinkReceipt={ledger.linkReceiptToTransaction}
       />
 
-      {/* Personal Expense Panel */}
       <PersonalExpensePanel
         open={showPersonalPanel}
         onClose={() => setShowPersonalPanel(false)}

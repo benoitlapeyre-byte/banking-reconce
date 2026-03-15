@@ -8,15 +8,20 @@ interface SidebarFilterProps {
     total: number;
     pending: number;
     matched: number;
+    autoMatched: number;
     personal: number;
+    credit: number;
+    debit: number;
   };
 }
 
-const filters: { key: FilterStatus; label: string }[] = [
+const filters: { key: FilterStatus; label: string; group?: string }[] = [
   { key: 'all', label: 'Tout' },
   { key: 'pending', label: 'En attente' },
   { key: 'matched', label: 'Réconcilié' },
-  { key: 'personal', label: 'Personnel' },
+  { key: 'auto-matched', label: 'Auto-rapproché' },
+  { key: 'credit', label: '↓ Crédits', group: 'type' },
+  { key: 'debit', label: '↑ Débits', group: 'type' },
 ];
 
 export function SidebarFilter({ filter, onFilterChange, stats }: SidebarFilterProps) {
@@ -25,16 +30,38 @@ export function SidebarFilter({ filter, onFilterChange, stats }: SidebarFilterPr
       case 'all': return stats.total;
       case 'pending': return stats.pending;
       case 'matched': return stats.matched;
-      case 'personal': return stats.personal;
+      case 'auto-matched': return stats.autoMatched;
+      case 'credit': return stats.credit;
+      case 'debit': return stats.debit;
+      default: return 0;
     }
   };
 
   return (
     <nav className="flex flex-col gap-0.5">
       <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-        Filtres
+        Statut
       </p>
-      {filters.map(f => (
+      {filters.filter(f => !f.group).map(f => (
+        <button
+          key={f.key}
+          onClick={() => onFilterChange(f.key)}
+          className={cn(
+            "flex items-center justify-between px-3 py-2 rounded-sm text-sm transition-snappy",
+            filter === f.key
+              ? "bg-accent text-accent-foreground font-medium"
+              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          )}
+        >
+          <span>{f.label}</span>
+          <span className="font-mono text-xs">{getCount(f.key)}</span>
+        </button>
+      ))}
+
+      <p className="px-3 py-2 mt-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+        Type
+      </p>
+      {filters.filter(f => f.group === 'type').map(f => (
         <button
           key={f.key}
           onClick={() => onFilterChange(f.key)}
