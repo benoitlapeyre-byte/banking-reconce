@@ -136,3 +136,65 @@ import { Transaction, Receipt, PersonalExpense } from './types';
     note: 'Correspondance trop faible — réconciliation manuelle requise',
   };
 }
+
+/**
+ * Try to extract personal expense info from a receipt filename.
+ * e.g. "restaurant_comptoir_42.50_2026-01-15.pdf" → { merchant: "restaurant comptoir", amount: 42.50, date: "2026-01-15" }
+ */
+export function extractPersonalExpenseFromFilename(filename: string): Partial<Omit<PersonalExpense, 'id' | 'createdAt'>> | null {
+  const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
+  
+  // Extract amounts
+  const amounts = extractAmountsFromFilename(nameWithoutExt);
+  if (amounts.length === 0) return null;
+
+  // Extract date patterns: 2026-01-15, 15-01-2026, 15_01_2026, etc.
+  const datePatterns = [
+    /(\d{4}[-_]\d{2}[-_]\d{2})/,       // YYYY-MM-DD
+    /(\d{2}[-_]\d{2}[-_]\d{4})/,       // DD-MM-YYYY
+    /(\d{2}[-_]\d{2}[-_]\d{2})(?!\d)/,  // DD-MM-YY
+  ];
+  
+  let extractedDate: string | undefined;
+  for (const dp of datePatterns) {
+    const m = dp.exec(nameWithoutExt);
+    if (m) {
+      const raw = m[1].replace(/_/g, '-');
+      // Try to parse
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        extractedDate = raw;
+      } else if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
+        const [d, mo, y] = raw.split('-');
+        extractedDate = `${y}-${mo}-${d}`;
+      } else if (/^\d{2}-\d{2}-\d{2}$/.test(raw)) {
+        const [d, mo, y] = raw.split('-');
+        extractedDate = `20${y}-${mo}-${d}`;
+      }
+      break;
+    }
+  }
+
+  // Extract merchant: remove amounts, dates, and common prefixes, keep text
+  let merchantPart = nameWithoutExt
+    .replace(/\d{4}[-_]\d{2}[-_]\d{2}/g, '')
+    .replace(/\d{2}[-_]\d{2}[-_]\d{4}/g, '')
+    .replace(/\d{2}[-_]\d{2}[-_]\d{2}/g, '')
+    .replace(/\d{1,3}(?:[\s_]\d{3})*[.,]\d{2}/g, '')
+    .replace(/\d{3,}/g, '')
+    .replace(/^(facture|recu|ticket|note|justificatif|receipt|invoice)[-_\s]*/i, '')
+    .replace(/[-_]+/g, ' ')
+    .trim();
+
+  if (merchantPart.length < 2) {
+    merchantPart = nameWithoutExt.replace(/[-_]+/g, ' ').replace(/\.\w+$/, '').trim();
+  }
+
+  // Capitalize first letter
+  merchantPart = merchantPart.charAt(0).toUpperCase() + merchantPart.slice(1);
+
+  return {
+    merchant: merchantPart || 'Dépense personnelle',
+    amount: amounts[0],
+    date: extractedDate || new Date().toISOString().slice(0, 10),
+  };
+}
