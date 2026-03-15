@@ -6,10 +6,9 @@ import { Transaction, Receipt, PersonalExpense } from './types';
  */
 function extractAmountsFromFilename(filename: string): number[] {
   const amounts: number[] = [];
-  // Match patterns like 1170.00, 1170,00, 1 170,00, 1170
   const patterns = [
-    /(\d{1,3}(?:[\s_]\d{3})*[.,]\d{2})/g,  // with decimals
-    /(\d{3,})/g,                              // whole numbers 3+ digits
+    /(\d{1,3}(?:[\s_]\d{3})*[.,]\d{2})/g,
+    /(\d{3,})/g,
   ];
 
   for (const pattern of patterns) {
@@ -23,9 +22,6 @@ function extractAmountsFromFilename(filename: string): number[] {
   return [...new Set(amounts)];
 }
 
-/**
- * Normalize a label for fuzzy matching
- */
 function normalizeLabel(label: string): string[] {
   return label
     .toLowerCase()
@@ -34,9 +30,6 @@ function normalizeLabel(label: string): string[] {
     .filter(w => w.length > 3);
 }
 
-/**
- * Check if a filename contains keywords from a transaction label
- */
 function filenameMatchesLabel(filename: string, label: string): number {
   const fnWords = normalizeLabel(filename);
   const labelWords = normalizeLabel(label);
@@ -58,12 +51,10 @@ export interface ReconciliationResult {
   note: string;
 }
 
-/**
- * Try to auto-match a receipt with pending transactions.
- * Returns the best match or null.
- */
-import { Transaction, Receipt, PersonalExpense } from './types';
-
+export function autoReconcile(
+  receipt: Receipt,
+  transactions: Transaction[]
+): ReconciliationResult {
   const pendingTxs = transactions.filter(t => t.status === 'pending');
   if (pendingTxs.length === 0) {
     return { receiptId: receipt.id, transactionId: null, confidence: 'none', note: 'Aucune transaction en attente' };
@@ -78,7 +69,6 @@ import { Transaction, Receipt, PersonalExpense } from './types';
     let score = 0;
     const reasons: string[] = [];
 
-    // Amount match from filename
     for (const amt of fileAmounts) {
       if (Math.abs(amt - tx.amount) < 0.01) {
         score += 50;
@@ -86,7 +76,6 @@ import { Transaction, Receipt, PersonalExpense } from './types';
       }
     }
 
-    // Label match from filename
     const labelScore = filenameMatchesLabel(receipt.name, tx.label);
     if (labelScore > 0.3) {
       score += labelScore * 30;
@@ -101,58 +90,37 @@ import { Transaction, Receipt, PersonalExpense } from './types';
   candidates.sort((a, b) => b.score - a.score);
 
   if (candidates.length === 0) {
-    return {
-      receiptId: receipt.id,
-      transactionId: null,
-      confidence: 'none',
-      note: 'Aucune correspondance trouvée — réconciliation manuelle requise',
-    };
+    return { receiptId: receipt.id, transactionId: null, confidence: 'none', note: 'Aucune correspondance trouvée — réconciliation manuelle requise' };
   }
 
   const best = candidates[0];
 
   if (best.score >= 50 && (candidates.length === 1 || best.score > candidates[1].score * 1.5)) {
-    return {
-      receiptId: receipt.id,
-      transactionId: best.tx.id,
-      confidence: 'high',
-      note: `Auto-rapproché: ${best.reason}`,
-    };
+    return { receiptId: receipt.id, transactionId: best.tx.id, confidence: 'high', note: `Auto-rapproché: ${best.reason}` };
   }
 
   if (best.score >= 30) {
-    return {
-      receiptId: receipt.id,
-      transactionId: best.tx.id,
-      confidence: 'medium',
-      note: `Correspondance probable: ${best.reason} — vérification manuelle recommandée`,
-    };
+    return { receiptId: receipt.id, transactionId: best.tx.id, confidence: 'medium', note: `Correspondance probable: ${best.reason} — vérification manuelle recommandée` };
   }
 
-  return {
-    receiptId: receipt.id,
-    transactionId: null,
-    confidence: 'none',
-    note: 'Correspondance trop faible — réconciliation manuelle requise',
-  };
+  return { receiptId: receipt.id, transactionId: null, confidence: 'none', note: 'Correspondance trop faible — réconciliation manuelle requise' };
 }
 
 /**
- * Try to extract personal expense info from a receipt filename.
- * e.g. "restaurant_comptoir_42.50_2026-01-15.pdf" → { merchant: "restaurant comptoir", amount: 42.50, date: "2026-01-15" }
+ * Extract personal expense info from a receipt filename.
+ * e.g. "restaurant_comptoir_42.50_2026-01-15.pdf" → { merchant, amount, date }
  */
 export function extractPersonalExpenseFromFilename(filename: string): Partial<Omit<PersonalExpense, 'id' | 'createdAt'>> | null {
   const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
   
-  // Extract amounts
   const amounts = extractAmountsFromFilename(nameWithoutExt);
   if (amounts.length === 0) return null;
 
-  // Extract date patterns: 2026-01-15, 15-01-2026, 15_01_2026, etc.
+  // Extract date
   const datePatterns = [
-    /(\d{4}[-_]\d{2}[-_]\d{2})/,       // YYYY-MM-DD
-    /(\d{2}[-_]\d{2}[-_]\d{4})/,       // DD-MM-YYYY
-    /(\d{2}[-_]\d{2}[-_]\d{2})(?!\d)/,  // DD-MM-YY
+    /(\d{4}[-_]\d{2}[-_]\d{2})/,
+    /(\d{2}[-_]\d{2}[-_]\d{4})/,
+    /(\d{2}[-_]\d{2}[-_]\d{2})(?!\d)/,
   ];
   
   let extractedDate: string | undefined;
@@ -160,7 +128,6 @@ export function extractPersonalExpenseFromFilename(filename: string): Partial<Om
     const m = dp.exec(nameWithoutExt);
     if (m) {
       const raw = m[1].replace(/_/g, '-');
-      // Try to parse
       if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
         extractedDate = raw;
       } else if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
@@ -174,7 +141,7 @@ export function extractPersonalExpenseFromFilename(filename: string): Partial<Om
     }
   }
 
-  // Extract merchant: remove amounts, dates, and common prefixes, keep text
+  // Extract merchant name
   let merchantPart = nameWithoutExt
     .replace(/\d{4}[-_]\d{2}[-_]\d{2}/g, '')
     .replace(/\d{2}[-_]\d{2}[-_]\d{4}/g, '')
@@ -189,7 +156,6 @@ export function extractPersonalExpenseFromFilename(filename: string): Partial<Om
     merchantPart = nameWithoutExt.replace(/[-_]+/g, ' ').replace(/\.\w+$/, '').trim();
   }
 
-  // Capitalize first letter
   merchantPart = merchantPart.charAt(0).toUpperCase() + merchantPart.slice(1);
 
   return {
