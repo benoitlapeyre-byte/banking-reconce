@@ -33,21 +33,29 @@ function parseLocalizedNumber(value: string): number {
 function extractAmountsFromFilename(filename: string): number[] {
   const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
   const amounts: number[] = [];
-  
-  // Pattern 1: amounts with decimal (comma or dot) — e.g. 1170,50 or 1170.50 or 1 170,50
-  const decimalPattern = /(\d{1,3}(?:[\s_.]\d{3})*[,]\d{2})|(\d{1,3}(?:[\s_,]\d{3})*[.]\d{2})/g;
   let match: RegExpExecArray | null;
-  while ((match = decimalPattern.exec(nameWithoutExt)) !== null) {
-    const val = parseLocalizedNumber(match[0]);
-    if (val > 0) amounts.push(val);
+
+  // Pattern 1: amounts with comma decimal — e.g. 1170,50  1 170,50  1.170,50
+  const commaDecimal = /(\d[\d\s_.]*,\d{2})(?!\d)/g;
+  while ((match = commaDecimal.exec(nameWithoutExt)) !== null) {
+    const val = parseLocalizedNumber(match[1]);
+    if (val > 0 && !(val >= 1900 && val <= 2100)) amounts.push(val);
   }
 
-  // Pattern 2: integers that look like amounts (3+ digits, no decimal)
+  // Pattern 2: amounts with dot decimal — e.g. 1170.50  1,170.50
   if (amounts.length === 0) {
-    const intPattern = /(\d{2,})/g;
+    const dotDecimal = /(\d[\d\s_,]*\.\d{2})(?!\d)/g;
+    while ((match = dotDecimal.exec(nameWithoutExt)) !== null) {
+      const val = parseLocalizedNumber(match[1]);
+      if (val > 0 && !(val >= 1900 && val <= 2100)) amounts.push(val);
+    }
+  }
+
+  // Pattern 3: plain integers as fallback
+  if (amounts.length === 0) {
+    const intPattern = /(?<!\d)(\d{2,})(?!\d)/g;
     while ((match = intPattern.exec(nameWithoutExt)) !== null) {
       const val = parseFloat(match[1]);
-      // Skip things that look like dates (2024, 2025, 2026, etc.)
       if (!isNaN(val) && val > 0 && !(val >= 1900 && val <= 2100)) {
         amounts.push(val);
       }
