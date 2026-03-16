@@ -179,7 +179,7 @@ const Index = () => {
                   onDrop={handleImportReceipts}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
                   label="2. Importer des justificatifs"
-                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170,50.pdf)"
+                  sublabel="Les montants TTC sont détectés automatiquement par scan OCR du contenu"
                   compact
                 />
               </div>
