@@ -119,7 +119,8 @@ export function autoReconcile(
     for (const amt of fileAmounts) {
       if (Math.abs(amt - tx.amount) < 0.01) {
         score += 50;
-        reasons.push(`Montant ${amt}€ trouvé dans le nom du fichier`);
+        const source = scannedAmounts && scannedAmounts.length > 0 ? 'scanné dans le document' : 'nom du fichier';
+        reasons.push(`Montant ${amt}€ ${source}`);
       }
     }
 
