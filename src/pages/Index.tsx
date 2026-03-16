@@ -30,9 +30,9 @@ const Index = () => {
     }
   };
 
-  const handleImportReceipts = (files: File[]) => {
+  const handleImportReceipts = async (files: File[]) => {
     for (const file of files) {
-      const result = ledger.addReceiptWithAutoReconcile(file);
+      const result = await ledger.addReceiptWithAutoReconcile(file);
       if (result === 'unrecognized') {
         setShowPersonalPanel(true);
       }
@@ -117,15 +117,13 @@ const Index = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {!isEmpty && (
-              <ExportBar
-                transactions={ledger.monthFilteredTransactions}
-                personalExpenses={ledger.personalExpenses}
-                receipts={ledger.receipts}
-                month={ledger.selectedMonth}
-                onImportExcel={ledger.importFromExcelData}
-              />
-            )}
+            <ExportBar
+              transactions={ledger.monthFilteredTransactions}
+              personalExpenses={ledger.personalExpenses}
+              receipts={ledger.receipts}
+              month={ledger.selectedMonth}
+              onImportExcel={ledger.importFromExcelData}
+            />
             <button
               onClick={() => setShowPersonalPanel(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 border rounded-sm text-xs font-medium hover:bg-secondary transition-snappy"
@@ -181,7 +179,7 @@ const Index = () => {
                   onDrop={handleImportReceipts}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
                   label="2. Importer des justificatifs"
-                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170,50.pdf)"
+                  sublabel="Les montants TTC sont détectés automatiquement par scan OCR du contenu"
                   compact
                 />
               </div>
@@ -192,8 +190,8 @@ const Index = () => {
                 <Dropzone
                   onDrop={handleImportReceipts}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
-                  label="Ajouter des justificatifs (rapprochement auto par montant)"
-                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170,50.pdf)"
+                  label="Ajouter des justificatifs (scan OCR automatique des montants)"
+                  sublabel="PDF et images acceptés — les montants TTC sont extraits automatiquement du contenu"
                   compact
                 />
               </div>

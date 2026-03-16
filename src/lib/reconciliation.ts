@@ -96,14 +96,18 @@ export interface ReconciliationResult {
 
 export function autoReconcile(
   receipt: Receipt,
-  transactions: Transaction[]
+  transactions: Transaction[],
+  scannedAmounts?: number[]
 ): ReconciliationResult {
   const pendingTxs = transactions.filter(t => t.status === 'pending');
   if (pendingTxs.length === 0) {
     return { receiptId: receipt.id, transactionId: null, confidence: 'none', note: 'Aucune transaction en attente' };
   }
 
-  const fileAmounts = extractAmountsFromFilename(receipt.name);
+  // Use scanned amounts (OCR) first, then fallback to filename
+  const fileAmounts = scannedAmounts && scannedAmounts.length > 0
+    ? scannedAmounts
+    : extractAmountsFromFilename(receipt.name);
 
   type Candidate = { tx: Transaction; score: number; reason: string };
   const candidates: Candidate[] = [];
@@ -115,7 +119,8 @@ export function autoReconcile(
     for (const amt of fileAmounts) {
       if (Math.abs(amt - tx.amount) < 0.01) {
         score += 50;
-        reasons.push(`Montant ${amt}€ trouvé dans le nom du fichier`);
+        const source = scannedAmounts && scannedAmounts.length > 0 ? 'scanné dans le document' : 'nom du fichier';
+        reasons.push(`Montant ${amt}€ ${source}`);
       }
     }
 
