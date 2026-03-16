@@ -190,8 +190,8 @@ const Index = () => {
                 <Dropzone
                   onDrop={handleImportReceipts}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
-                  label="Ajouter des justificatifs (rapprochement auto par montant)"
-                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170,50.pdf)"
+                  label="Ajouter des justificatifs (scan OCR automatique des montants)"
+                  sublabel="PDF et images acceptés — les montants TTC sont extraits automatiquement du contenu"
                   compact
                 />
               </div>
