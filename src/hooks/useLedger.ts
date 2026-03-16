@@ -84,16 +84,17 @@ export function useLedger() {
     setReceipts(prev => [...prev, receipt]);
 
     // Scan file content for amounts (OCR for images, text extraction for PDFs)
-    toast.info(`🔍 Analyse du justificatif ${file.name}...`);
     let scannedAmounts: number[] = [];
     try {
-      scannedAmounts = await scanReceiptForAmounts(file);
+      scannedAmounts = await scanReceiptForAmounts(file, (p) => setScanProgress(p));
+      setScanProgress(null);
       if (scannedAmounts.length > 0) {
         console.log(`[Receipt] Scanned amounts from ${file.name}:`, scannedAmounts);
         toast.info(`Montants détectés: ${scannedAmounts.map(a => a.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })).join(', ')}`);
       }
     } catch (e) {
       console.error('[Receipt] OCR scan failed:', e);
+      setScanProgress(null);
     }
 
     let bankMatchResult: ReturnType<typeof autoReconcile> | null = null;
