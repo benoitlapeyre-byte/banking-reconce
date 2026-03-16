@@ -3,6 +3,7 @@ import { Transaction, Receipt, PersonalExpense, FilterStatus } from '@/lib/types
 import { loadTransactions, saveTransactions, loadPersonalExpenses, savePersonalExpenses, generateId } from '@/lib/store';
 import { extractStructuredLines, parseTransactionsFromLines } from '@/lib/pdf-parser';
 import { autoReconcile, extractPersonalExpenseFromFilename } from '@/lib/reconciliation';
+import { scanReceiptForAmounts } from '@/lib/receipt-scanner';
 import { toast } from 'sonner';
 
 export function useLedger() {
