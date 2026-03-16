@@ -1,21 +1,56 @@
 import { Transaction, Receipt, PersonalExpense } from './types';
 
 /**
+ * Parse a localized number string (handles European comma decimal and space/dot thousands).
+ * e.g. "1 170,50" → 1170.5, "1.170,50" → 1170.5, "1170.50" → 1170.5
+ */
+function parseLocalizedNumber(value: string): number {
+  if (!value || value === '') return 0;
+  let str = String(value).trim();
+  // Remove currency symbols and whitespace
+  str = str.replace(/[¤$€£¥\s]/g, '');
+  
+  const lastComma = str.lastIndexOf(',');
+  const lastDot = str.lastIndexOf('.');
+  // Auto-detect: if comma comes after dot, comma is decimal (European)
+  const isCommaDecimal = lastComma > lastDot;
+
+  if (isCommaDecimal) {
+    str = str.replace(/\./g, ''); // remove thousand separators
+    str = str.replace(',', '.'); // convert decimal
+  } else {
+    str = str.replace(/,/g, ''); // remove thousand separators
+  }
+
+  const parsed = parseFloat(str);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
  * Extract potential amounts from a receipt filename.
- * e.g. "facture_1170.00.pdf" → [1170], "loyer-1170,00.jpg" → [1170]
+ * Handles: "facture_1170,50.pdf", "loyer-1 170.00.pdf", "note_42.50€.pdf"
  */
 function extractAmountsFromFilename(filename: string): number[] {
+  const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
   const amounts: number[] = [];
-  const patterns = [
-    /(\d{1,3}(?:[\s_]\d{3})*[.,]\d{2})/g,
-    /(\d{3,})/g,
-  ];
+  
+  // Pattern 1: amounts with decimal (comma or dot) — e.g. 1170,50 or 1170.50 or 1 170,50
+  const decimalPattern = /(\d{1,3}(?:[\s_.]\d{3})*[,]\d{2})|(\d{1,3}(?:[\s_,]\d{3})*[.]\d{2})/g;
+  let match: RegExpExecArray | null;
+  while ((match = decimalPattern.exec(nameWithoutExt)) !== null) {
+    const val = parseLocalizedNumber(match[0]);
+    if (val > 0) amounts.push(val);
+  }
 
-  for (const pattern of patterns) {
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(filename)) !== null) {
-      const val = parseFloat(match[1].replace(/[\s_]/g, '').replace(',', '.'));
-      if (!isNaN(val) && val > 0) amounts.push(val);
+  // Pattern 2: integers that look like amounts (3+ digits, no decimal)
+  if (amounts.length === 0) {
+    const intPattern = /(\d{2,})/g;
+    while ((match = intPattern.exec(nameWithoutExt)) !== null) {
+      const val = parseFloat(match[1]);
+      // Skip things that look like dates (2024, 2025, 2026, etc.)
+      if (!isNaN(val) && val > 0 && !(val >= 1900 && val <= 2100)) {
+        amounts.push(val);
+      }
     }
   }
 
