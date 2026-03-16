@@ -96,14 +96,18 @@ export interface ReconciliationResult {
 
 export function autoReconcile(
   receipt: Receipt,
-  transactions: Transaction[]
+  transactions: Transaction[],
+  scannedAmounts?: number[]
 ): ReconciliationResult {
   const pendingTxs = transactions.filter(t => t.status === 'pending');
   if (pendingTxs.length === 0) {
     return { receiptId: receipt.id, transactionId: null, confidence: 'none', note: 'Aucune transaction en attente' };
   }
 
-  const fileAmounts = extractAmountsFromFilename(receipt.name);
+  // Use scanned amounts (OCR) first, then fallback to filename
+  const fileAmounts = scannedAmounts && scannedAmounts.length > 0
+    ? scannedAmounts
+    : extractAmountsFromFilename(receipt.name);
 
   type Candidate = { tx: Transaction; score: number; reason: string };
   const candidates: Candidate[] = [];
