@@ -217,14 +217,25 @@ const Index = () => {
                 />
               </div>
 
-              {ledger.personalExpenses.length > 0 && (
-                <div className="px-5">
-                  <PersonalExpenseList
-                    expenses={ledger.personalExpenses}
-                    onRemove={ledger.removePersonalExpense}
-                  />
-                </div>
-              )}
+              {(() => {
+                // Exclude personal expenses whose receipt is linked to a bank transaction
+                const reconciledReceiptIds = new Set(
+                  ledger.receipts
+                    .filter(r => r.linkedTransactionId)
+                    .map(r => r.id)
+                );
+                const unreconciledExpenses = ledger.personalExpenses.filter(
+                  e => !e.receiptId || !reconciledReceiptIds.has(e.receiptId)
+                );
+                return unreconciledExpenses.length > 0 ? (
+                  <div className="px-5">
+                    <PersonalExpenseList
+                      expenses={unreconciledExpenses}
+                      onRemove={ledger.removePersonalExpense}
+                    />
+                  </div>
+                ) : null;
+              })()}
             </div>
           )}
         </div>

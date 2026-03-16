@@ -47,7 +47,7 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
               <th className="py-2 px-3 w-[50px]">Type</th>
               <th className="py-2 px-3">Libellé</th>
               <th className="py-2 px-3 w-[120px] text-right">Montant</th>
-              <th className="py-2 px-3 w-[90px] text-center">Justificatif</th>
+              <th className="py-2 px-3 w-[180px]">Justificatif</th>
               <th className="py-2 px-3 w-[130px]">État</th>
               <th className="py-2 px-3 w-[80px]" />
             </tr>
@@ -117,31 +117,19 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
                       {tx.type === 'debit' ? '−' : '+'}{' '}
                       {tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
                     </td>
-                    <td className="py-2 px-3 text-center">
+                    <td className="py-2 px-3">
                       {hasProof ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 text-primary">
-                              <FileCheck className="h-4 w-4" />
-                              <span className="text-[10px] font-semibold uppercase">Oui</span>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[200px]">
-                            <p className="text-xs font-medium">📎 {proofReceipt?.name}</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        <div className="flex items-center gap-1.5">
+                          <FileCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                          <span className="text-[10px] text-foreground truncate max-w-[140px]" title={proofReceipt?.name}>
+                            {proofReceipt?.name}
+                          </span>
+                        </div>
                       ) : (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 text-destructive/60">
-                              <FileX className="h-4 w-4" />
-                              <span className="text-[10px] font-semibold uppercase">Non</span>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            <p className="text-xs">Aucun justificatif lié — réconciliation manuelle requise</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        <span className="inline-flex items-center gap-1 text-destructive/60">
+                          <FileX className="h-3.5 w-3.5" />
+                          <span className="text-[10px] text-muted-foreground">Aucun</span>
+                        </span>
                       )}
                     </td>
                     <td className="py-2 px-3">
