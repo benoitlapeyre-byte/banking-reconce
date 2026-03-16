@@ -5,18 +5,31 @@ import { extractStructuredLines } from './pdf-parser';
  * Extract text content from a receipt file (PDF or image) using OCR/text extraction.
  * Returns extracted text for amount parsing.
  */
-export async function extractTextFromReceipt(file: File): Promise<string> {
+export type ScanProgress = {
+  status: 'extracting' | 'recognizing' | 'parsing' | 'done';
+  progress: number; // 0-100
+  fileName: string;
+};
+
+export async function extractTextFromReceipt(
+  file: File,
+  onProgress?: (p: ScanProgress) => void
+): Promise<string> {
   if (file.type === 'application/pdf') {
+    onProgress?.({ status: 'extracting', progress: 20, fileName: file.name });
     const lines = await extractStructuredLines(file);
+    onProgress?.({ status: 'parsing', progress: 80, fileName: file.name });
     return lines.map(l => l.text).join('\n');
   }
 
   // Image files: use Tesseract OCR
   if (file.type.startsWith('image/')) {
+    onProgress?.({ status: 'recognizing', progress: 5, fileName: file.name });
     const result = await Tesseract.recognize(file, 'fra+eng', {
       logger: (m) => {
         if (m.status === 'recognizing text') {
-          console.log(`[OCR] Progress: ${Math.round((m.progress || 0) * 100)}%`);
+          const pct = Math.round((m.progress || 0) * 100);
+          onProgress?.({ status: 'recognizing', progress: Math.min(pct, 95), fileName: file.name });
         }
       },
     });
