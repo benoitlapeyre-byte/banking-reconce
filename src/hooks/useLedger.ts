@@ -254,6 +254,7 @@ export function useLedger() {
     setSelectedMonth,
     availableMonths,
     isProcessing,
+    scanProgress,
     selectedTransaction,
     setSelectedTransaction,
     importStatement,
