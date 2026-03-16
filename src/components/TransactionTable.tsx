@@ -1,7 +1,8 @@
 import { Transaction, Receipt } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Paperclip, X, ArrowDownLeft, ArrowUpRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Paperclip, X, ArrowDownLeft, ArrowUpRight, CheckCircle2, AlertCircle, FileCheck, FileX } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -36,116 +37,149 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
   }
 
   return (
-    <div className="w-full overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            <th className="w-[3px] p-0" />
-            <th className="py-2 px-3 w-[100px]">Date</th>
-            <th className="py-2 px-3 w-[50px]">Type</th>
-            <th className="py-2 px-3">Libellé</th>
-            <th className="py-2 px-3 w-[120px] text-right">Montant</th>
-            <th className="py-2 px-3 w-[130px]">État</th>
-            <th className="py-2 px-3 w-[80px]" />
-          </tr>
-        </thead>
-        <tbody>
-          <AnimatePresence mode="popLayout">
-            {transactions.map((tx, i) => {
-              const receipt = receipts.find(r => r.id === tx.receiptId);
-              const status = statusConfig[tx.status];
-              return (
-                <motion.tr
-                  key={tx.id}
-                  variants={rowVariant}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={{ duration: 0.15, delay: i * 0.02 }}
-                  onClick={() => onSelect(tx)}
-                  className={cn(
-                    "border-b cursor-pointer transition-snappy group",
-                    "hover:bg-secondary/50",
-                    selectedId === tx.id && "bg-secondary",
-                    i % 2 === 0 && "bg-background",
-                    i % 2 === 1 && "bg-muted/30",
-                    (tx.status === 'matched' || tx.status === 'auto-matched') && "animate-match-flash"
-                  )}
-                >
-                  <td className="p-0">
-                    <div className={cn("w-[3px] h-full min-h-[36px]", status.color)} />
-                  </td>
-                  <td className="py-2 px-3 font-mono text-xs">{tx.date}</td>
-                  <td className="py-2 px-3">
-                    {tx.type === 'credit' ? (
-                      <span className="inline-flex items-center gap-0.5 text-primary text-[10px] font-bold uppercase">
-                        <ArrowDownLeft className="h-3 w-3" />
-                        CR
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-0.5 text-destructive text-[10px] font-bold uppercase">
-                        <ArrowUpRight className="h-3 w-3" />
-                        DB
-                      </span>
+    <TooltipProvider delayDuration={200}>
+      <div className="w-full overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="w-[3px] p-0" />
+              <th className="py-2 px-3 w-[100px]">Date</th>
+              <th className="py-2 px-3 w-[50px]">Type</th>
+              <th className="py-2 px-3">Libellé</th>
+              <th className="py-2 px-3 w-[120px] text-right">Montant</th>
+              <th className="py-2 px-3 w-[90px] text-center">Justificatif</th>
+              <th className="py-2 px-3 w-[130px]">État</th>
+              <th className="py-2 px-3 w-[80px]" />
+            </tr>
+          </thead>
+          <tbody>
+            <AnimatePresence mode="popLayout">
+              {transactions.map((tx, i) => {
+                const receipt = receipts.find(r => r.id === tx.receiptId);
+                const linkedReceipt = receipts.find(r => r.linkedTransactionId === tx.id);
+                const hasProof = !!(receipt || linkedReceipt);
+                const proofReceipt = receipt || linkedReceipt;
+                const status = statusConfig[tx.status];
+                return (
+                  <motion.tr
+                    key={tx.id}
+                    variants={rowVariant}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    transition={{ duration: 0.15, delay: i * 0.02 }}
+                    onClick={() => onSelect(tx)}
+                    className={cn(
+                      "border-b cursor-pointer transition-snappy group",
+                      "hover:bg-secondary/50",
+                      selectedId === tx.id && "bg-secondary",
+                      i % 2 === 0 && "bg-background",
+                      i % 2 === 1 && "bg-muted/30",
+                      (tx.status === 'matched' || tx.status === 'auto-matched') && "animate-match-flash"
                     )}
-                  </td>
-                  <td className="py-2 px-3 truncate max-w-[300px]" title={tx.label}>
-                    <div className="flex flex-col">
-                      <span>{tx.label}</span>
-                      {tx.reconciliationNote && (
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                          {tx.status === 'auto-matched' ? (
-                            <CheckCircle2 className="h-2.5 w-2.5 text-primary" />
-                          ) : (
-                            <AlertCircle className="h-2.5 w-2.5 text-personal" />
-                          )}
-                          {tx.reconciliationNote}
+                  >
+                    <td className="p-0">
+                      <div className={cn("w-[3px] h-full min-h-[36px]", status.color)} />
+                    </td>
+                    <td className="py-2 px-3 font-mono text-xs">{tx.date}</td>
+                    <td className="py-2 px-3">
+                      {tx.type === 'credit' ? (
+                        <span className="inline-flex items-center gap-0.5 text-primary text-[10px] font-bold uppercase">
+                          <ArrowDownLeft className="h-3 w-3" />
+                          CR
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-0.5 text-destructive text-[10px] font-bold uppercase">
+                          <ArrowUpRight className="h-3 w-3" />
+                          DB
                         </span>
                       )}
-                    </div>
-                  </td>
-                  <td className={cn(
-                    "py-2 px-3 font-mono text-right tabular-nums font-medium",
-                    tx.type === 'credit' ? "text-primary" : "text-destructive"
-                  )}>
-                    {tx.type === 'debit' ? '−' : '+'}{' '}
-                    {tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
-                  </td>
-                  <td className="py-2 px-3">
-                    <span className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
-                      status.badge,
+                    </td>
+                    <td className="py-2 px-3 truncate max-w-[300px]" title={tx.label}>
+                      <div className="flex flex-col">
+                        <span>{tx.label}</span>
+                        {tx.reconciliationNote && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                            {tx.status === 'auto-matched' ? (
+                              <CheckCircle2 className="h-2.5 w-2.5 text-primary" />
+                            ) : (
+                              <AlertCircle className="h-2.5 w-2.5 text-personal" />
+                            )}
+                            {tx.reconciliationNote}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className={cn(
+                      "py-2 px-3 font-mono text-right tabular-nums font-medium",
+                      tx.type === 'credit' ? "text-primary" : "text-destructive"
                     )}>
-                      {tx.status === 'auto-matched' && <CheckCircle2 className="h-2.5 w-2.5" />}
-                      {status.label}
-                    </span>
-                  </td>
-                  <td className="py-2 px-3">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-snappy">
-                      {receipt && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onUnlink(tx.id); }}
-                          className="p-1 hover:bg-destructive/10 rounded-sm"
-                          title="Délier le justificatif"
-                        >
-                          <Paperclip className="h-3.5 w-3.5 text-primary" />
-                        </button>
+                      {tx.type === 'debit' ? '−' : '+'}{' '}
+                      {tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      {hasProof ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 text-primary">
+                              <FileCheck className="h-4 w-4" />
+                              <span className="text-[10px] font-semibold uppercase">Oui</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[200px]">
+                            <p className="text-xs font-medium">📎 {proofReceipt?.name}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 text-destructive/60">
+                              <FileX className="h-4 w-4" />
+                              <span className="text-[10px] font-semibold uppercase">Non</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p className="text-xs">Aucun justificatif lié — réconciliation manuelle requise</p>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onRemove(tx.id); }}
-                        className="p-1 hover:bg-destructive/10 rounded-sm"
-                        title="Supprimer"
-                      >
-                        <X className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              );
-            })}
-          </AnimatePresence>
-        </tbody>
-      </table>
-    </div>
+                    </td>
+                    <td className="py-2 px-3">
+                      <span className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                        status.badge,
+                      )}>
+                        {tx.status === 'auto-matched' && <CheckCircle2 className="h-2.5 w-2.5" />}
+                        {status.label}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-snappy">
+                        {(receipt || linkedReceipt) && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onUnlink(tx.id); }}
+                            className="p-1 hover:bg-destructive/10 rounded-sm"
+                            title="Délier le justificatif"
+                          >
+                            <Paperclip className="h-3.5 w-3.5 text-primary" />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onRemove(tx.id); }}
+                          className="p-1 hover:bg-destructive/10 rounded-sm"
+                          title="Supprimer"
+                        >
+                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </div>
+                    </td>
+                  </motion.tr>
+                );
+              })}
+            </AnimatePresence>
+          </tbody>
+        </table>
+      </div>
+    </TooltipProvider>
   );
 }
