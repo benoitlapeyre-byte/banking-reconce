@@ -13,6 +13,7 @@ export function useLedger() {
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => { saveTransactions(transactions); }, [transactions]);
