@@ -234,6 +234,29 @@ const Index = () => {
             Analyse du relevé en cours...
           </div>
         )}
+
+        {ledger.scanProgress && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-card border shadow-lg rounded-md px-5 py-3 min-w-[300px] space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-foreground truncate max-w-[180px]">
+                {ledger.scanProgress.fileName}
+              </span>
+              <span className="text-muted-foreground">
+                {ledger.scanProgress.status === 'extracting' && 'Extraction du texte…'}
+                {ledger.scanProgress.status === 'recognizing' && 'OCR en cours…'}
+                {ledger.scanProgress.status === 'parsing' && 'Analyse des montants…'}
+                {ledger.scanProgress.status === 'done' && 'Terminé ✓'}
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${ledger.scanProgress.progress}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground text-right">{ledger.scanProgress.progress}%</p>
+          </div>
+        )}
       </main>
 
       <DetailPanel

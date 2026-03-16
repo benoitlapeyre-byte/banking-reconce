@@ -3,7 +3,7 @@ import { Transaction, Receipt, PersonalExpense, FilterStatus } from '@/lib/types
 import { loadTransactions, saveTransactions, loadPersonalExpenses, savePersonalExpenses, generateId } from '@/lib/store';
 import { extractStructuredLines, parseTransactionsFromLines } from '@/lib/pdf-parser';
 import { autoReconcile, extractPersonalExpenseFromFilename } from '@/lib/reconciliation';
-import { scanReceiptForAmounts } from '@/lib/receipt-scanner';
+import { scanReceiptForAmounts, ScanProgress } from '@/lib/receipt-scanner';
 import { toast } from 'sonner';
 
 export function useLedger() {
@@ -13,6 +13,7 @@ export function useLedger() {
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => { saveTransactions(transactions); }, [transactions]);
@@ -83,16 +84,17 @@ export function useLedger() {
     setReceipts(prev => [...prev, receipt]);
 
     // Scan file content for amounts (OCR for images, text extraction for PDFs)
-    toast.info(`🔍 Analyse du justificatif ${file.name}...`);
     let scannedAmounts: number[] = [];
     try {
-      scannedAmounts = await scanReceiptForAmounts(file);
+      scannedAmounts = await scanReceiptForAmounts(file, (p) => setScanProgress(p));
+      setScanProgress(null);
       if (scannedAmounts.length > 0) {
         console.log(`[Receipt] Scanned amounts from ${file.name}:`, scannedAmounts);
         toast.info(`Montants détectés: ${scannedAmounts.map(a => a.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })).join(', ')}`);
       }
     } catch (e) {
       console.error('[Receipt] OCR scan failed:', e);
+      setScanProgress(null);
     }
 
     let bankMatchResult: ReturnType<typeof autoReconcile> | null = null;
@@ -252,6 +254,7 @@ export function useLedger() {
     setSelectedMonth,
     availableMonths,
     isProcessing,
+    scanProgress,
     selectedTransaction,
     setSelectedTransaction,
     importStatement,
