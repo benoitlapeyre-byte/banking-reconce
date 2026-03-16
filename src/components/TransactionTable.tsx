@@ -47,7 +47,7 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
               <th className="py-2 px-3 w-[50px]">Type</th>
               <th className="py-2 px-3">Libellé</th>
               <th className="py-2 px-3 w-[120px] text-right">Montant</th>
-              <th className="py-2 px-3 w-[90px] text-center">Justificatif</th>
+              <th className="py-2 px-3 w-[180px]">Justificatif</th>
               <th className="py-2 px-3 w-[130px]">État</th>
               <th className="py-2 px-3 w-[80px]" />
             </tr>
