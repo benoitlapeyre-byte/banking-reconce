@@ -117,15 +117,13 @@ const Index = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {!isEmpty && (
-              <ExportBar
-                transactions={ledger.monthFilteredTransactions}
-                personalExpenses={ledger.personalExpenses}
-                receipts={ledger.receipts}
-                month={ledger.selectedMonth}
-                onImportExcel={ledger.importFromExcelData}
-              />
-            )}
+            <ExportBar
+              transactions={ledger.monthFilteredTransactions}
+              personalExpenses={ledger.personalExpenses}
+              receipts={ledger.receipts}
+              month={ledger.selectedMonth}
+              onImportExcel={ledger.importFromExcelData}
+            />
             <button
               onClick={() => setShowPersonalPanel(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 border rounded-sm text-xs font-medium hover:bg-secondary transition-snappy"

@@ -71,7 +71,7 @@ export function useLedger() {
     return receipt;
   }, []);
 
-  const addReceiptWithAutoReconcile = useCallback((file: File): 'matched' | 'personal-auto' | 'unrecognized' => {
+  const addReceiptWithAutoReconcile = useCallback(async (file: File): Promise<'matched' | 'personal-auto' | 'unrecognized'> => {
     const receipt: Receipt = {
       id: generateId(),
       name: file.name,
@@ -82,10 +82,23 @@ export function useLedger() {
 
     setReceipts(prev => [...prev, receipt]);
 
+    // Scan file content for amounts (OCR for images, text extraction for PDFs)
+    toast.info(`🔍 Analyse du justificatif ${file.name}...`);
+    let scannedAmounts: number[] = [];
+    try {
+      scannedAmounts = await scanReceiptForAmounts(file);
+      if (scannedAmounts.length > 0) {
+        console.log(`[Receipt] Scanned amounts from ${file.name}:`, scannedAmounts);
+        toast.info(`Montants détectés: ${scannedAmounts.map(a => a.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })).join(', ')}`);
+      }
+    } catch (e) {
+      console.error('[Receipt] OCR scan failed:', e);
+    }
+
     let bankMatchResult: ReturnType<typeof autoReconcile> | null = null;
 
     setTransactions(prev => {
-      const result = autoReconcile(receipt, prev);
+      const result = autoReconcile(receipt, prev, scannedAmounts);
       bankMatchResult = result;
 
       if (result.transactionId && result.confidence === 'high') {
