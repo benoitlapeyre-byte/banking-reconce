@@ -30,9 +30,9 @@ const Index = () => {
     }
   };
 
-  const handleImportReceipts = (files: File[]) => {
+  const handleImportReceipts = async (files: File[]) => {
     for (const file of files) {
-      const result = ledger.addReceiptWithAutoReconcile(file);
+      const result = await ledger.addReceiptWithAutoReconcile(file);
       if (result === 'unrecognized') {
         setShowPersonalPanel(true);
       }
