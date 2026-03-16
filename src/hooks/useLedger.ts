@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Transaction, Receipt, PersonalExpense, FilterStatus } from '@/lib/types';
 import { loadTransactions, saveTransactions, loadPersonalExpenses, savePersonalExpenses, generateId } from '@/lib/store';
 import { extractStructuredLines, parseTransactionsFromLines } from '@/lib/pdf-parser';
@@ -10,11 +10,29 @@ export function useLedger() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [personalExpenses, setPersonalExpenses] = useState<PersonalExpense[]>(() => loadPersonalExpenses());
   const [filter, setFilter] = useState<FilterStatus>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => { saveTransactions(transactions); }, [transactions]);
   useEffect(() => { savePersonalExpenses(personalExpenses); }, [personalExpenses]);
+
+  // Extract available months from transactions
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+    for (const tx of transactions) {
+      // Parse date in format DD/MM/YYYY or DD.MM.YYYY
+      const m = tx.date.match(/(\d{2})[\/.](\d{2})[\/.](\d{2,4})/);
+      if (m) {
+        const year = m[3].length === 2 ? `20${m[3]}` : m[3];
+        months.add(`${year}-${m[2]}`);
+      }
+      // ISO format YYYY-MM-DD
+      const iso = tx.date.match(/^(\d{4})-(\d{2})/);
+      if (iso) months.add(`${iso[1]}-${iso[2]}`);
+    }
+    return [...months].sort();
+  }, [transactions]);
 
   const importStatement = useCallback(async (file: File) => {
     setIsProcessing(true);
@@ -52,7 +70,6 @@ export function useLedger() {
     return receipt;
   }, []);
 
-  // Auto-reconcile: try to match a receipt with pending transactions, then try personal expense
   const addReceiptWithAutoReconcile = useCallback((file: File): 'matched' | 'personal-auto' | 'unrecognized' => {
     const receipt: Receipt = {
       id: generateId(),
@@ -64,9 +81,8 @@ export function useLedger() {
 
     setReceipts(prev => [...prev, receipt]);
 
-    // First: try to match against bank transactions
     let bankMatchResult: ReturnType<typeof autoReconcile> | null = null;
-    
+
     setTransactions(prev => {
       const result = autoReconcile(receipt, prev);
       bankMatchResult = result;
@@ -93,12 +109,10 @@ export function useLedger() {
       return prev;
     });
 
-    // If matched a bank transaction, done
     if (bankMatchResult && (bankMatchResult as any).confidence !== 'none') {
       return 'matched';
     }
 
-    // Second: try to auto-create a personal expense from filename
     const expenseInfo = extractPersonalExpenseFromFilename(file.name);
     if (expenseInfo && expenseInfo.amount && expenseInfo.merchant) {
       const newExpense: PersonalExpense = {
@@ -117,7 +131,6 @@ export function useLedger() {
       return 'personal-auto';
     }
 
-    // Nothing recognized
     toast.warning(`⚠️ ${file.name}: non reconnu`, {
       description: 'Aucune correspondance bancaire ni dépense personnelle détectée. Ajoutez manuellement.',
     });
@@ -170,7 +183,28 @@ export function useLedger() {
     localStorage.clear();
   }, []);
 
-  const filteredTransactions = transactions.filter(t => {
+  const importFromExcelData = useCallback((data: { transactions: Transaction[]; personalExpenses: PersonalExpense[] }) => {
+    setTransactions(prev => [...prev, ...data.transactions]);
+    setPersonalExpenses(prev => [...prev, ...data.personalExpenses]);
+  }, []);
+
+  // Filter by month
+  const monthFiltered = useMemo(() => {
+    if (!selectedMonth) return transactions;
+    return transactions.filter(tx => {
+      const m = tx.date.match(/(\d{2})[\/.](\d{2})[\/.](\d{2,4})/);
+      if (m) {
+        const year = m[3].length === 2 ? `20${m[3]}` : m[3];
+        return `${year}-${m[2]}` === selectedMonth;
+      }
+      const iso = tx.date.match(/^(\d{4})-(\d{2})/);
+      if (iso) return `${iso[1]}-${iso[2]}` === selectedMonth;
+      return false;
+    });
+  }, [transactions, selectedMonth]);
+
+  // Filter by status/type
+  const filteredTransactions = monthFiltered.filter(t => {
     if (filter === 'all') return true;
     if (filter === 'credit') return t.type === 'credit';
     if (filter === 'debit') return t.type === 'debit';
@@ -179,26 +213,30 @@ export function useLedger() {
   });
 
   const stats = {
-    total: transactions.length,
-    pending: transactions.filter(t => t.status === 'pending').length,
-    matched: transactions.filter(t => t.status === 'matched' || t.status === 'auto-matched').length,
-    autoMatched: transactions.filter(t => t.status === 'auto-matched').length,
+    total: monthFiltered.length,
+    pending: monthFiltered.filter(t => t.status === 'pending').length,
+    matched: monthFiltered.filter(t => t.status === 'matched' || t.status === 'auto-matched').length,
+    autoMatched: monthFiltered.filter(t => t.status === 'auto-matched').length,
     personal: personalExpenses.length,
-    credit: transactions.filter(t => t.type === 'credit').length,
-    debit: transactions.filter(t => t.type === 'debit').length,
-    creditAmount: transactions.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0),
-    debitAmount: transactions.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0),
-    pendingAmount: transactions.filter(t => t.status === 'pending').reduce((s, t) => s + t.amount, 0),
+    credit: monthFiltered.filter(t => t.type === 'credit').length,
+    debit: monthFiltered.filter(t => t.type === 'debit').length,
+    creditAmount: monthFiltered.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0),
+    debitAmount: monthFiltered.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0),
+    pendingAmount: monthFiltered.filter(t => t.status === 'pending').reduce((s, t) => s + t.amount, 0),
     unmatchedReceipts: receipts.filter(r => !r.linkedTransactionId).length,
   };
 
   return {
     transactions: filteredTransactions,
     allTransactions: transactions,
+    monthFilteredTransactions: monthFiltered,
     receipts,
     personalExpenses,
     filter,
     setFilter,
+    selectedMonth,
+    setSelectedMonth,
+    availableMonths,
     isProcessing,
     selectedTransaction,
     setSelectedTransaction,
@@ -211,6 +249,7 @@ export function useLedger() {
     removeTransaction,
     removePersonalExpense,
     clearAll,
+    importFromExcelData,
     stats,
   };
 }
