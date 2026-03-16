@@ -159,13 +159,20 @@ function parseAmount(value: string): number {
 /**
  * Full receipt scanning: extract text then find amounts.
  */
-export async function scanReceiptForAmounts(file: File): Promise<number[]> {
+export async function scanReceiptForAmounts(
+  file: File,
+  onProgress?: (p: ScanProgress) => void
+): Promise<number[]> {
   try {
-    const text = await extractTextFromReceipt(file);
+    const text = await extractTextFromReceipt(file, onProgress);
+    onProgress?.({ status: 'parsing', progress: 90, fileName: file.name });
     if (!text.trim()) return [];
-    return extractAmountsFromText(text);
+    const amounts = extractAmountsFromText(text);
+    onProgress?.({ status: 'done', progress: 100, fileName: file.name });
+    return amounts;
   } catch (e) {
     console.error('[Receipt Scanner] Error scanning receipt:', e);
+    onProgress?.({ status: 'done', progress: 100, fileName: file.name });
     return [];
   }
 }
