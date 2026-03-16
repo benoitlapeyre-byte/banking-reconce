@@ -6,6 +6,8 @@ import { TransactionTable } from '@/components/TransactionTable';
 import { DetailPanel } from '@/components/DetailPanel';
 import { PersonalExpensePanel } from '@/components/PersonalExpensePanel';
 import { PersonalExpenseList } from '@/components/PersonalExpenseList';
+import { MonthSelector } from '@/components/MonthSelector';
+import { ExportBar } from '@/components/ExportBar';
 import { Upload, Plus, Trash2, AlertTriangle, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -83,6 +85,14 @@ const Index = () => {
                   <span className="text-muted-foreground">Justificatifs libres</span>
                   <span className="font-mono font-medium">{ledger.stats.unmatchedReceipts}</span>
                 </div>
+                {ledger.stats.total > 0 && (
+                  <div className="flex justify-between border-t pt-1.5 mt-1.5">
+                    <span className="text-muted-foreground">Taux réconciliation</span>
+                    <span className="font-mono font-medium text-primary">
+                      {Math.round(ledger.stats.matched / ledger.stats.total * 100)}%
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -107,6 +117,15 @@ const Index = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {!isEmpty && (
+              <ExportBar
+                transactions={ledger.monthFilteredTransactions}
+                personalExpenses={ledger.personalExpenses}
+                receipts={ledger.receipts}
+                month={ledger.selectedMonth}
+                onImportExcel={ledger.importFromExcelData}
+              />
+            )}
             <button
               onClick={() => setShowPersonalPanel(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 border rounded-sm text-xs font-medium hover:bg-secondary transition-snappy"
@@ -162,7 +181,7 @@ const Index = () => {
                   onDrop={handleImportReceipts}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
                   label="2. Importer des justificatifs"
-                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170.pdf)"
+                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170,50.pdf)"
                   compact
                 />
               </div>
@@ -174,10 +193,20 @@ const Index = () => {
                   onDrop={handleImportReceipts}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
                   label="Ajouter des justificatifs (rapprochement auto par montant)"
-                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170.pdf)"
+                  sublabel="Nommez vos fichiers avec le montant pour un rapprochement automatique (ex: facture_1170,50.pdf)"
                   compact
                 />
               </div>
+
+              {ledger.availableMonths.length > 0 && (
+                <div className="px-5 flex items-center justify-between">
+                  <MonthSelector
+                    months={ledger.availableMonths}
+                    selected={ledger.selectedMonth}
+                    onSelect={ledger.setSelectedMonth}
+                  />
+                </div>
+              )}
 
               <div className="px-5">
                 <TransactionTable
