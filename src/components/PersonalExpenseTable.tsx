@@ -67,6 +67,7 @@ export function PersonalExpenseTable({
               <th className="py-2 px-3 w-[110px]">Date</th>
               <th className="py-2 px-3">Marchand</th>
               <th className="py-2 px-3 w-[120px] text-right">Montant</th>
+              <th className="py-2 px-3 w-[180px]">Justificatif</th>
               <th className="py-2 px-3 w-[150px]">Note</th>
               <th className="py-2 px-3 w-[130px]">État</th>
               <th className="py-2 px-3 w-[100px]" />
@@ -128,6 +129,11 @@ export function PersonalExpenseTable({
                           {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
                         </span>
                       )}
+                    </td>
+                    <td className="py-2 px-3">
+                      <span className="text-xs text-muted-foreground truncate max-w-[170px] block" title={receipt?.name}>
+                        {receipt?.name || '—'}
+                      </span>
                     </td>
                     <td className="py-2 px-3">
                       {isEditing ? (
@@ -192,7 +198,7 @@ export function PersonalExpenseTable({
                   </tr>
                   {isLinking && (
                     <tr key={`${exp.id}-link`} className="border-b bg-secondary/30">
-                      <td colSpan={7} className="px-6 py-3">
+                      <td colSpan={8} className="px-6 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">
                           Réconcilier avec une opération bancaire ({pendingTransactions.length} en attente)
                         </p>
