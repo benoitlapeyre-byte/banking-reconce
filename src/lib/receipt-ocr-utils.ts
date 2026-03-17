@@ -73,19 +73,13 @@ export function extractAmountsFromReceiptText(text: string): number[] {
     const hasStrongKeywords = STRONG_TOTAL_KEYWORDS.test(line);
     const hasNegativeKeywords = NEGATIVE_AMOUNT_KEYWORDS.test(line);
 
-    const explicitPatterns = [
-      /(?:total\s*t\.?t\.?c\.?|montant\s*t\.?t\.?c\.?|t\.?t\.?c\.?|net\s*[àa]\s*payer|total\s*[àa]\s*payer|montant\s*total|total\s*g[ée]n[ée]ral)\D{0,12}([€$£¥]?\s*\d[\d\s.,]*\d|[€$£¥]?\s*\d+)/i,
-      /([€$£¥]?\s*\d[\d\s.,]*\d|[€$£¥]?\s*\d+)\s*(?:€|eur)?\s*(?:t\.?t\.?c\.?|total)/i,
-    ];
-
-    for (const pattern of explicitPatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        const amount = parseAmount(match[1]);
-        if (isPlausibleAmount(amount)) {
-          candidates.push({ amount, score: 12 });
-        }
-      }
+    for (const candidate of extractKeywordAmountCandidates(line)) {
+      let score = candidate.score;
+      if (hasCurrency) score += 2;
+      if (hasStrongKeywords) score += 4;
+      else if (hasPositiveKeywords) score += 2;
+      if (hasNegativeKeywords && !candidate.preserveOnNegativeLine) score -= 4;
+      candidates.push({ amount: candidate.amount, score });
     }
 
     const tokens = extractAmountTokens(line, hasCurrency || hasPositiveKeywords || hasStrongKeywords);
@@ -100,6 +94,8 @@ export function extractAmountsFromReceiptText(text: string): number[] {
       if (hasNegativeKeywords) score -= 6;
       if (/([€$£¥]?\s*\d[\d\s.,]*\d|[€$£¥]?\s*\d+)\s*(?:€|eur)?\s*$/i.test(line)) score += 1;
       if (amount >= 1 && amount <= 5000) score += 1;
+      if (amount < 2) score -= 2;
+      if (amount <= 0.2) score -= 4;
       candidates.push({ amount, score });
     }
   }
