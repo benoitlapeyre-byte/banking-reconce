@@ -97,11 +97,16 @@ export function useLedger() {
     setReceipts((prev) => [...prev, receipt]);
 
     let scannedAmounts: number[] = [];
+    let scannedDate: string | null = null;
+    let scannedMerchant: string | null = null;
     try {
-      scannedAmounts = await scanReceiptForAmounts(file, (progress) => setScanProgress(progress));
+      const scanResult = await scanReceipt(file, (progress) => setScanProgress(progress));
       setScanProgress(null);
+      scannedAmounts = scanResult.amounts;
+      scannedDate = scanResult.date;
+      scannedMerchant = scanResult.merchant;
       if (scannedAmounts.length > 0) {
-        console.log(`[Receipt] Scanned amounts from ${file.name}:`, scannedAmounts);
+        console.log(`[Receipt] Scanned from ${file.name}:`, { amounts: scannedAmounts, date: scannedDate, merchant: scannedMerchant });
         toast.info(`Montants détectés: ${scannedAmounts.map((amount) => amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })).join(', ')}`);
       }
     } catch (e) {
@@ -154,28 +159,34 @@ export function useLedger() {
       return 'matched';
     }
 
+    // No bank match — auto-create personal expense from OCR data or filename
+    const ocrAmount = scannedAmounts.length > 0 ? scannedAmounts[0] : null;
     const expenseInfo = extractPersonalExpenseFromFilename(file.name);
-    if (expenseInfo && expenseInfo.amount && expenseInfo.merchant) {
-      const newExpense: PersonalExpense = {
-        id: generateId(),
-        merchant: expenseInfo.merchant,
-        amount: expenseInfo.amount,
-        date: expenseInfo.date || new Date().toISOString().slice(0, 10),
-        receiptId: receipt.id,
-        note: 'Auto-détecté depuis le justificatif',
-        createdAt: new Date().toISOString(),
-      };
-      setPersonalExpenses((prev) => [...prev, newExpense]);
-      toast.success(`💰 Dépense personnelle détectée: ${newExpense.merchant}`, {
-        description: `${newExpense.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} — ${newExpense.date}`,
-      });
-      return 'personal-auto';
-    }
+    const merchant = scannedMerchant || expenseInfo?.merchant || file.name.replace(/\.[^.]+$/, '');
+    const amount = ocrAmount || expenseInfo?.amount;
+    const date = scannedDate || expenseInfo?.date || new Date().toISOString().slice(0, 10);
 
-    toast.warning(`⚠️ ${file.name}: non reconnu`, {
-      description: 'Aucune correspondance bancaire ni dépense personnelle détectée. Ajoutez manuellement.',
-    });
-    return 'unrecognized';
+    const newExpense: PersonalExpense = {
+      id: generateId(),
+      merchant,
+      amount: amount || 0,
+      date,
+      receiptId: receipt.id,
+      note: amount ? 'Auto-détecté depuis le justificatif' : 'Montant non détecté — à compléter',
+      createdAt: new Date().toISOString(),
+    };
+    setPersonalExpenses((prev) => [...prev, newExpense]);
+
+    if (amount) {
+      toast.success(`💰 Dépense ajoutée: ${merchant}`, {
+        description: `${amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} — ${date}`,
+      });
+    } else {
+      toast.warning(`⚠️ ${file.name}: montant non détecté`, {
+        description: 'Ajouté aux dépenses personnelles — complétez le montant manuellement.',
+      });
+    }
+    return 'personal-auto';
   }, [syncSelectedTransaction]);
 
   const linkReceiptToTransaction = useCallback((receiptId: string, transactionId: string) => {
