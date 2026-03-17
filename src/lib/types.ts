@@ -12,6 +12,7 @@ export interface Transaction {
   reconciliationNote?: string;
   validationComment?: string;
   raw: string;
+  statementSource?: string; // filename of the imported bank statement
 }
 
 export interface Receipt {

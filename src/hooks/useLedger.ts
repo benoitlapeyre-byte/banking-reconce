@@ -38,6 +38,16 @@ export function useLedger() {
     return [...months].sort();
   }, [transactions]);
 
+  const statementSources = useMemo(() => {
+    const sources = new Set<string>();
+    for (const tx of transactions) {
+      if (tx.statementSource) sources.add(tx.statementSource);
+    }
+    return [...sources].sort();
+  }, [transactions]);
+
+  const [selectedStatement, setSelectedStatement] = useState<string | null>(null);
+
   const importStatement = useCallback(async (file: File) => {
     setIsProcessing(true);
     try {
@@ -51,6 +61,7 @@ export function useLedger() {
         type: t.type,
         status: 'pending',
         raw: t.raw,
+        statementSource: file.name,
       }));
       setTransactions((prev) => [...prev, ...newTxs]);
       return newTxs.length;
@@ -244,6 +255,51 @@ export function useLedger() {
     setSelectedTransaction((prev) => (prev?.id === id ? null : prev));
   }, []);
 
+  const updatePersonalExpense = useCallback((id: string, updates: Partial<Pick<PersonalExpense, 'date' | 'merchant' | 'amount' | 'note'>>) => {
+    setPersonalExpenses((prev) => prev.map((exp) =>
+      exp.id === id ? { ...exp, ...updates } : exp
+    ));
+  }, []);
+
+  const reconcileExpenseWithTransaction = useCallback((expenseId: string, transactionId: string) => {
+    const expense = personalExpenses.find((e) => e.id === expenseId);
+    if (!expense) return;
+
+    // Link receipt if the expense has one
+    if (expense.receiptId) {
+      setReceipts((prev) => prev.map((r) =>
+        r.id === expense.receiptId ? { ...r, linkedTransactionId: transactionId } : r
+      ));
+      setTransactions((prev) => prev.map((tx) => {
+        if (tx.id !== transactionId) return tx;
+        const updated = {
+          ...tx,
+          status: 'matched' as const,
+          receiptId: expense.receiptId,
+          reconciliationNote: `Réconcilié via dépense personnelle: ${expense.merchant}`,
+          validationComment: undefined,
+        };
+        syncSelectedTransaction(updated);
+        return updated;
+      }));
+    } else {
+      setTransactions((prev) => prev.map((tx) => {
+        if (tx.id !== transactionId) return tx;
+        const updated = {
+          ...tx,
+          status: 'matched' as const,
+          validationComment: `Dépense personnelle: ${expense.merchant} — ${expense.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`,
+        };
+        syncSelectedTransaction(updated);
+        return updated;
+      }));
+    }
+
+    // Remove the personal expense since it's now reconciled
+    setPersonalExpenses((prev) => prev.filter((e) => e.id !== expenseId));
+    toast.success(`Dépense réconciliée avec l'opération bancaire`);
+  }, [personalExpenses, syncSelectedTransaction]);
+
   const removePersonalExpense = useCallback((id: string) => {
     setPersonalExpenses((prev) => prev.filter((expense) => expense.id !== id));
   }, []);
@@ -261,9 +317,14 @@ export function useLedger() {
     setPersonalExpenses((prev) => [...prev, ...data.personalExpenses]);
   }, []);
 
+  const statementFiltered = useMemo(() => {
+    if (!selectedStatement) return transactions;
+    return transactions.filter((tx) => tx.statementSource === selectedStatement);
+  }, [transactions, selectedStatement]);
+
   const monthFiltered = useMemo(() => {
-    if (!selectedMonth) return transactions;
-    return transactions.filter((tx) => {
+    if (!selectedMonth) return statementFiltered;
+    return statementFiltered.filter((tx) => {
       const m = tx.date.match(/(\d{2})[\/.](\d{2})[\/.](\d{2,4})/);
       if (m) {
         const year = m[3].length === 2 ? `20${m[3]}` : m[3];
@@ -273,7 +334,7 @@ export function useLedger() {
       if (iso) return `${iso[1]}-${iso[2]}` === selectedMonth;
       return false;
     });
-  }, [transactions, selectedMonth]);
+  }, [statementFiltered, selectedMonth]);
 
   const filteredTransactions = monthFiltered.filter((transaction) => {
     if (filter === 'all') return true;
@@ -307,6 +368,9 @@ export function useLedger() {
     setFilter,
     selectedMonth,
     setSelectedMonth,
+    selectedStatement,
+    setSelectedStatement,
+    statementSources,
     availableMonths,
     isProcessing,
     scanProgress,
@@ -319,6 +383,8 @@ export function useLedger() {
     unlinkReceipt,
     validateTransactionWithoutReceipt,
     addPersonalExpense,
+    updatePersonalExpense,
+    reconcileExpenseWithTransaction,
     removeTransaction,
     removePersonalExpense,
     clearAll,
