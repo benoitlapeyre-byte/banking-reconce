@@ -198,7 +198,7 @@ export function PersonalExpenseTable({
                   </tr>
                   {isLinking && (
                     <tr key={`${exp.id}-link`} className="border-b bg-secondary/30">
-                      <td colSpan={7} className="px-6 py-3">
+                      <td colSpan={8} className="px-6 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">
                           Réconcilier avec une opération bancaire ({pendingTransactions.length} en attente)
                         </p>
