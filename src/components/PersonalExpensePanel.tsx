@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ScanLine, CheckCircle2 } from 'lucide-react';
 import { Dropzone } from './Dropzone';
 import { PersonalExpense } from '@/lib/types';
-import { scanReceiptForAmounts, ScanProgress } from '@/lib/receipt-scanner';
+import { scanReceipt, ScanProgress } from '@/lib/receipt-scanner';
 
 interface PersonalExpensePanelProps {
   open: boolean;
@@ -23,6 +23,8 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [detectedAmounts, setDetectedAmounts] = useState<number[]>([]);
   const [scanned, setScanned] = useState(false);
+  const [ocrDate, setOcrDate] = useState<string | null>(null);
+  const [ocrMerchant, setOcrMerchant] = useState<string | null>(null);
 
   const reset = () => {
     setDate('');
@@ -35,6 +37,8 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
     setScanProgress(null);
     setDetectedAmounts([]);
     setScanned(false);
+    setOcrDate(null);
+    setOcrMerchant(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -63,23 +67,29 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
     setDetectedAmounts([]);
 
     try {
-      const amounts = await scanReceiptForAmounts(file, (p) => setScanProgress(p));
+      const result = await scanReceipt(file, (p) => setScanProgress(p));
       setScanProgress(null);
-      setDetectedAmounts(amounts);
+      setDetectedAmounts(result.amounts);
       setScanned(true);
 
-      if (amounts.length > 0) {
-        // Pre-fill with the largest amount (likely TTC total)
-        setAmount(amounts[0].toFixed(2).replace('.', ','));
+      // Auto-fill amount (largest = likely TTC total)
+      if (result.amounts.length > 0) {
+        setAmount(result.amounts[0].toFixed(2).replace('.', ','));
       }
 
-      // Pre-fill date with today if empty
-      if (!date) {
+      // Auto-fill date from OCR, fallback to today
+      if (result.date) {
+        setDate(result.date);
+        setOcrDate(result.date);
+      } else if (!date) {
         setDate(new Date().toISOString().slice(0, 10));
       }
 
-      // Use filename as merchant hint if empty
-      if (!merchant) {
+      // Auto-fill merchant from OCR, fallback to filename
+      if (result.merchant) {
+        setMerchant(result.merchant);
+        setOcrMerchant(result.merchant);
+      } else if (!merchant) {
         const name = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').trim();
         setMerchant(name);
       }
@@ -119,13 +129,13 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
                   <ScanLine className="inline h-3.5 w-3.5 mr-1" />
-                  Importez d'abord le justificatif — les montants seront détectés automatiquement par OCR.
+                  Importez le justificatif — le montant TTC, la date et le marchand seront détectés automatiquement.
                 </p>
                 <Dropzone
                   onDrop={handleReceiptUpload}
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
                   label={scanning ? "Scan OCR en cours…" : "Importer un justificatif"}
-                  sublabel="PDF, JPG, PNG — le montant TTC sera extrait automatiquement"
+                  sublabel="PDF, JPG, PNG — extraction automatique par OCR"
                   compact
                 />
                 {scanProgress && (
@@ -159,7 +169,7 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
               </div>
             )}
 
-            {/* Step 2: Confirm/edit detected values */}
+            {/* Step 2: Auto-filled form — user corrects only if needed */}
             {scanned && (
               <form onSubmit={handleSubmit} className="space-y-4">
                 {receiptName && (
@@ -169,10 +179,34 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
                   </div>
                 )}
 
+                {/* OCR detection summary */}
+                {(detectedAmounts.length > 0 || ocrDate || ocrMerchant) && (
+                  <div className="bg-secondary/50 border rounded-sm px-3 py-2 space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Détecté par OCR
+                    </p>
+                    {ocrDate && (
+                      <p className="text-xs text-foreground">📅 Date : {new Date(ocrDate).toLocaleDateString('fr-FR')}</p>
+                    )}
+                    {ocrMerchant && (
+                      <p className="text-xs text-foreground truncate">🏪 Marchand : {ocrMerchant}</p>
+                    )}
+                    {detectedAmounts.length > 0 && (
+                      <p className="text-xs text-foreground">
+                        💰 Montant : {detectedAmounts[0].toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                        {detectedAmounts.length > 1 && ` (+${detectedAmounts.length - 1} autres)`}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground italic mt-1">
+                      Corrigez ci-dessous si nécessaire
+                    </p>
+                  </div>
+                )}
+
                 {detectedAmounts.length > 1 && (
                   <div>
                     <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 block">
-                      Montants détectés (cliquez pour sélectionner)
+                      Autres montants détectés
                     </label>
                     <div className="flex flex-wrap gap-1.5">
                       {detectedAmounts.map((a, i) => (
@@ -194,7 +228,9 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
                 )}
 
                 <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">Date</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">
+                    Date {ocrDate && <span className="text-primary normal-case">— détectée par OCR</span>}
+                  </label>
                   <input
                     type="date"
                     value={date}
@@ -204,7 +240,9 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">Marchand</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">
+                    Marchand {ocrMerchant && <span className="text-primary normal-case">— détecté par OCR</span>}
+                  </label>
                   <input
                     type="text"
                     value={merchant}
@@ -216,7 +254,7 @@ export function PersonalExpensePanel({ open, onClose, onAdd, onAddReceipt }: Per
                 </div>
                 <div>
                   <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">
-                    Montant (€) {detectedAmounts.length > 0 && <span className="text-primary normal-case">— pré-rempli par OCR</span>}
+                    Montant (€) {detectedAmounts.length > 0 && <span className="text-primary normal-case">— détecté par OCR</span>}
                   </label>
                   <input
                     type="text"
