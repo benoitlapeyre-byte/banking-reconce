@@ -89,8 +89,8 @@ const Index = () => {
                   </span>
                 </div>
                 <div className="flex justify-between border-t pt-1.5 mt-1.5">
-                  <span className="text-muted-foreground">Justificatifs libres</span>
-                  <span className="font-mono font-medium">{ledger.stats.unmatchedReceipts}</span>
+                  <span className="text-muted-foreground">Justificatifs</span>
+                  <span className="font-mono font-medium">{ledger.stats.totalReceipts}</span>
                 </div>
                 {ledger.stats.total > 0 && (
                   <div className="flex justify-between border-t pt-1.5 mt-1.5">

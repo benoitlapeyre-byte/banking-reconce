@@ -366,6 +366,7 @@ export function useLedger() {
     creditAmount: monthFiltered.filter((transaction) => transaction.type === 'credit').reduce((sum, transaction) => sum + transaction.amount, 0),
     debitAmount: monthFiltered.filter((transaction) => transaction.type === 'debit').reduce((sum, transaction) => sum + transaction.amount, 0),
     pendingAmount: monthFiltered.filter((transaction) => transaction.status === 'pending').reduce((sum, transaction) => sum + transaction.amount, 0),
+    totalReceipts: receipts.length,
     unmatchedReceipts: receipts.filter((receipt) => !receipt.linkedTransactionId).length,
   };
 
