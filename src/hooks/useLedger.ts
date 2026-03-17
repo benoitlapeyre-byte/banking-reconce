@@ -255,6 +255,51 @@ export function useLedger() {
     setSelectedTransaction((prev) => (prev?.id === id ? null : prev));
   }, []);
 
+  const updatePersonalExpense = useCallback((id: string, updates: Partial<Pick<PersonalExpense, 'date' | 'merchant' | 'amount' | 'note'>>) => {
+    setPersonalExpenses((prev) => prev.map((exp) =>
+      exp.id === id ? { ...exp, ...updates } : exp
+    ));
+  }, []);
+
+  const reconcileExpenseWithTransaction = useCallback((expenseId: string, transactionId: string) => {
+    const expense = personalExpenses.find((e) => e.id === expenseId);
+    if (!expense) return;
+
+    // Link receipt if the expense has one
+    if (expense.receiptId) {
+      setReceipts((prev) => prev.map((r) =>
+        r.id === expense.receiptId ? { ...r, linkedTransactionId: transactionId } : r
+      ));
+      setTransactions((prev) => prev.map((tx) => {
+        if (tx.id !== transactionId) return tx;
+        const updated = {
+          ...tx,
+          status: 'matched' as const,
+          receiptId: expense.receiptId,
+          reconciliationNote: `Réconcilié via dépense personnelle: ${expense.merchant}`,
+          validationComment: undefined,
+        };
+        syncSelectedTransaction(updated);
+        return updated;
+      }));
+    } else {
+      setTransactions((prev) => prev.map((tx) => {
+        if (tx.id !== transactionId) return tx;
+        const updated = {
+          ...tx,
+          status: 'matched' as const,
+          validationComment: `Dépense personnelle: ${expense.merchant} — ${expense.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`,
+        };
+        syncSelectedTransaction(updated);
+        return updated;
+      }));
+    }
+
+    // Remove the personal expense since it's now reconciled
+    setPersonalExpenses((prev) => prev.filter((e) => e.id !== expenseId));
+    toast.success(`Dépense réconciliée avec l'opération bancaire`);
+  }, [personalExpenses, syncSelectedTransaction]);
+
   const removePersonalExpense = useCallback((id: string) => {
     setPersonalExpenses((prev) => prev.filter((expense) => expense.id !== id));
   }, []);
