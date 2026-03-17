@@ -5,8 +5,9 @@ import { Dropzone } from '@/components/Dropzone';
 import { TransactionTable } from '@/components/TransactionTable';
 import { DetailPanel } from '@/components/DetailPanel';
 import { PersonalExpensePanel } from '@/components/PersonalExpensePanel';
-import { PersonalExpenseList } from '@/components/PersonalExpenseList';
+import { PersonalExpenseTable } from '@/components/PersonalExpenseTable';
 import { MonthSelector } from '@/components/MonthSelector';
+import { StatementSelector } from '@/components/StatementSelector';
 import { ExportBar } from '@/components/ExportBar';
 import { Upload, Plus, Trash2, AlertTriangle, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { toast } from 'sonner';
@@ -40,6 +41,16 @@ const Index = () => {
   };
 
   const isEmpty = ledger.allTransactions.length === 0 && ledger.personalExpenses.length === 0;
+
+  // Personal expenses not reconciled with a bank transaction
+  const reconciledReceiptIds = new Set(
+    ledger.receipts
+      .filter((receipt) => receipt.linkedTransactionId)
+      .map((receipt) => receipt.id)
+  );
+  const unreconciledExpenses = ledger.personalExpenses.filter(
+    (expense) => !expense.receiptId || !reconciledReceiptIds.has(expense.receiptId)
+  );
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -90,6 +101,12 @@ const Index = () => {
                     <span className="font-mono font-medium text-primary">
                       {Math.round(ledger.stats.matched / ledger.stats.total * 100)}%
                     </span>
+                  </div>
+                )}
+                {unreconciledExpenses.length > 0 && (
+                  <div className="flex justify-between border-t pt-1.5 mt-1.5">
+                    <span className="text-muted-foreground">Dépenses perso.</span>
+                    <span className="font-mono font-medium text-personal">{unreconciledExpenses.length}</span>
                   </div>
                 )}
               </div>
@@ -194,15 +211,22 @@ const Index = () => {
                 />
               </div>
 
-              {ledger.availableMonths.length > 0 && (
-                <div className="px-5 flex items-center justify-between">
+              <div className="px-5 flex flex-col gap-2">
+                {ledger.statementSources.length > 1 && (
+                  <StatementSelector
+                    sources={ledger.statementSources}
+                    selected={ledger.selectedStatement}
+                    onSelect={ledger.setSelectedStatement}
+                  />
+                )}
+                {ledger.availableMonths.length > 0 && (
                   <MonthSelector
                     months={ledger.availableMonths}
                     selected={ledger.selectedMonth}
                     onSelect={ledger.setSelectedMonth}
                   />
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="px-5">
                 <TransactionTable
@@ -215,24 +239,18 @@ const Index = () => {
                 />
               </div>
 
-              {(() => {
-                const reconciledReceiptIds = new Set(
-                  ledger.receipts
-                    .filter((receipt) => receipt.linkedTransactionId)
-                    .map((receipt) => receipt.id)
-                );
-                const unreconciledExpenses = ledger.personalExpenses.filter(
-                  (expense) => !expense.receiptId || !reconciledReceiptIds.has(expense.receiptId)
-                );
-                return unreconciledExpenses.length > 0 ? (
-                  <div className="px-5">
-                    <PersonalExpenseList
-                      expenses={unreconciledExpenses}
-                      onRemove={ledger.removePersonalExpense}
-                    />
-                  </div>
-                ) : null;
-              })()}
+              {unreconciledExpenses.length > 0 && (
+                <div className="px-5">
+                  <PersonalExpenseTable
+                    expenses={unreconciledExpenses}
+                    transactions={ledger.allTransactions}
+                    receipts={ledger.receipts}
+                    onRemove={ledger.removePersonalExpense}
+                    onUpdate={ledger.updatePersonalExpense}
+                    onReconcileWithTransaction={ledger.reconcileExpenseWithTransaction}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
