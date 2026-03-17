@@ -1,8 +1,8 @@
 import { Transaction, Receipt } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Paperclip, X, ArrowDownLeft, ArrowUpRight, CheckCircle2, AlertCircle, FileCheck, FileX } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Paperclip, X, ArrowDownLeft, ArrowUpRight, CheckCircle2, AlertCircle, FileCheck, FileX, MessageSquare } from 'lucide-react';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -55,11 +55,13 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
           <tbody>
             <AnimatePresence mode="popLayout">
               {transactions.map((tx, i) => {
-                const receipt = receipts.find(r => r.id === tx.receiptId);
-                const linkedReceipt = receipts.find(r => r.linkedTransactionId === tx.id);
-                const hasProof = !!(receipt || linkedReceipt);
+                const receipt = receipts.find((currentReceipt) => currentReceipt.id === tx.receiptId);
+                const linkedReceipt = receipts.find((currentReceipt) => currentReceipt.linkedTransactionId === tx.id);
                 const proofReceipt = receipt || linkedReceipt;
+                const hasProof = Boolean(proofReceipt);
+                const hasNoReceiptValidation = !hasProof && Boolean(tx.validationComment);
                 const status = statusConfig[tx.status];
+
                 return (
                   <motion.tr
                     key={tx.id}
@@ -70,16 +72,16 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
                     transition={{ duration: 0.15, delay: i * 0.02 }}
                     onClick={() => onSelect(tx)}
                     className={cn(
-                      "border-b cursor-pointer transition-snappy group",
-                      "hover:bg-secondary/50",
-                      selectedId === tx.id && "bg-secondary",
-                      i % 2 === 0 && "bg-background",
-                      i % 2 === 1 && "bg-muted/30",
-                      (tx.status === 'matched' || tx.status === 'auto-matched') && "animate-match-flash"
+                      'border-b cursor-pointer transition-snappy group',
+                      'hover:bg-secondary/50',
+                      selectedId === tx.id && 'bg-secondary',
+                      i % 2 === 0 && 'bg-background',
+                      i % 2 === 1 && 'bg-muted/30',
+                      (tx.status === 'matched' || tx.status === 'auto-matched') && 'animate-match-flash'
                     )}
                   >
                     <td className="p-0">
-                      <div className={cn("w-[3px] h-full min-h-[36px]", status.color)} />
+                      <div className={cn('w-[3px] h-full min-h-[36px]', status.color)} />
                     </td>
                     <td className="py-2 px-3 font-mono text-xs">{tx.date}</td>
                     <td className="py-2 px-3">
@@ -108,11 +110,17 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
                             {tx.reconciliationNote}
                           </span>
                         )}
+                        {tx.validationComment && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MessageSquare className="h-2.5 w-2.5" />
+                            {tx.validationComment}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className={cn(
-                      "py-2 px-3 font-mono text-right tabular-nums font-medium",
-                      tx.type === 'credit' ? "text-primary" : "text-destructive"
+                      'py-2 px-3 font-mono text-right tabular-nums font-medium',
+                      tx.type === 'credit' ? 'text-primary' : 'text-destructive'
                     )}>
                       {tx.type === 'debit' ? '−' : '+'}{' '}
                       {tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
@@ -125,6 +133,13 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
                             {proofReceipt?.name}
                           </span>
                         </div>
+                      ) : hasNoReceiptValidation ? (
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <FileX className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span className="text-[10px] truncate max-w-[140px]" title="Aucun justificatif applicable">
+                            Non applicable
+                          </span>
+                        </div>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-destructive/60">
                           <FileX className="h-3.5 w-3.5" />
@@ -134,7 +149,7 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
                     </td>
                     <td className="py-2 px-3">
                       <span className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
                         status.badge,
                       )}>
                         {tx.status === 'auto-matched' && <CheckCircle2 className="h-2.5 w-2.5" />}
@@ -143,7 +158,7 @@ export function TransactionTable({ transactions, receipts, onSelect, selectedId,
                     </td>
                     <td className="py-2 px-3">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-snappy">
-                        {(receipt || linkedReceipt) && (
+                        {hasProof && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onUnlink(tx.id); }}
                             className="p-1 hover:bg-destructive/10 rounded-sm"

@@ -10,6 +10,7 @@ export interface Transaction {
   status: TransactionStatus;
   receiptId?: string;
   reconciliationNote?: string;
+  validationComment?: string;
   raw: string;
 }
 
