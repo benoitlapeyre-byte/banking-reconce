@@ -51,9 +51,9 @@ function extractAmountsFromFilename(filename: string): number[] {
     }
   }
 
-  // Pattern 3: plain integers as fallback
-  if (amounts.length === 0) {
-    const intPattern = /(?<!\d)(\d{2,})(?!\d)/g;
+  // Pattern 3: plain integers as fallback, but only for realistic expense amounts
+  if (amounts.length === 0 && !isLikelyCameraFilename(nameWithoutExt)) {
+    const intPattern = /(?<!\d)(\d{1,4})(?!\d)/g;
     while ((match = intPattern.exec(nameWithoutExt)) !== null) {
       const val = parseFloat(match[1]);
       if (!isNaN(val) && val > 0 && !(val >= 1900 && val <= 2100)) {
