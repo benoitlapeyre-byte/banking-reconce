@@ -317,9 +317,14 @@ export function useLedger() {
     setPersonalExpenses((prev) => [...prev, ...data.personalExpenses]);
   }, []);
 
+  const statementFiltered = useMemo(() => {
+    if (!selectedStatement) return transactions;
+    return transactions.filter((tx) => tx.statementSource === selectedStatement);
+  }, [transactions, selectedStatement]);
+
   const monthFiltered = useMemo(() => {
-    if (!selectedMonth) return transactions;
-    return transactions.filter((tx) => {
+    if (!selectedMonth) return statementFiltered;
+    return statementFiltered.filter((tx) => {
       const m = tx.date.match(/(\d{2})[\/.](\d{2})[\/.](\d{2,4})/);
       if (m) {
         const year = m[3].length === 2 ? `20${m[3]}` : m[3];
@@ -329,7 +334,7 @@ export function useLedger() {
       if (iso) return `${iso[1]}-${iso[2]}` === selectedMonth;
       return false;
     });
-  }, [transactions, selectedMonth]);
+  }, [statementFiltered, selectedMonth]);
 
   const filteredTransactions = monthFiltered.filter((transaction) => {
     if (filter === 'all') return true;
