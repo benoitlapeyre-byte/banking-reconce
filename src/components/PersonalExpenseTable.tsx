@@ -67,6 +67,7 @@ export function PersonalExpenseTable({
               <th className="py-2 px-3 w-[110px]">Date</th>
               <th className="py-2 px-3">Marchand</th>
               <th className="py-2 px-3 w-[120px] text-right">Montant</th>
+              <th className="py-2 px-3 w-[180px]">Justificatif</th>
               <th className="py-2 px-3 w-[150px]">Note</th>
               <th className="py-2 px-3 w-[130px]">État</th>
               <th className="py-2 px-3 w-[100px]" />
