@@ -38,6 +38,16 @@ export function useLedger() {
     return [...months].sort();
   }, [transactions]);
 
+  const statementSources = useMemo(() => {
+    const sources = new Set<string>();
+    for (const tx of transactions) {
+      if (tx.statementSource) sources.add(tx.statementSource);
+    }
+    return [...sources].sort();
+  }, [transactions]);
+
+  const [selectedStatement, setSelectedStatement] = useState<string | null>(null);
+
   const importStatement = useCallback(async (file: File) => {
     setIsProcessing(true);
     try {
@@ -51,6 +61,7 @@ export function useLedger() {
         type: t.type,
         status: 'pending',
         raw: t.raw,
+        statementSource: file.name,
       }));
       setTransactions((prev) => [...prev, ...newTxs]);
       return newTxs.length;
