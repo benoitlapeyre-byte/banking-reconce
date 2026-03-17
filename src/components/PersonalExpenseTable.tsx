@@ -131,6 +131,11 @@ export function PersonalExpenseTable({
                       )}
                     </td>
                     <td className="py-2 px-3">
+                      <span className="text-xs text-muted-foreground truncate max-w-[170px] block" title={receipt?.name}>
+                        {receipt?.name || '—'}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3">
                       {isEditing ? (
                         <input
                           type="text"
