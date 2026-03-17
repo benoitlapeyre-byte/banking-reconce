@@ -19,17 +19,19 @@ export function useLedger() {
   useEffect(() => { saveTransactions(transactions); }, [transactions]);
   useEffect(() => { savePersonalExpenses(personalExpenses); }, [personalExpenses]);
 
-  // Extract available months from transactions
+  const syncSelectedTransaction = useCallback((updated: Transaction | null) => {
+    if (!updated) return;
+    setSelectedTransaction((prev) => (prev?.id === updated.id ? updated : prev));
+  }, []);
+
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
     for (const tx of transactions) {
-      // Parse date in format DD/MM/YYYY or DD.MM.YYYY
       const m = tx.date.match(/(\d{2})[\/.](\d{2})[\/.](\d{2,4})/);
       if (m) {
         const year = m[3].length === 2 ? `20${m[3]}` : m[3];
         months.add(`${year}-${m[2]}`);
       }
-      // ISO format YYYY-MM-DD
       const iso = tx.date.match(/^(\d{4})-(\d{2})/);
       if (iso) months.add(`${iso[1]}-${iso[2]}`);
     }
@@ -41,7 +43,7 @@ export function useLedger() {
     try {
       const lines = await extractStructuredLines(file);
       const parsed = parseTransactionsFromLines(lines);
-      const newTxs: Transaction[] = parsed.map(t => ({
+      const newTxs: Transaction[] = parsed.map((t) => ({
         id: generateId(),
         date: t.date,
         label: t.label,
@@ -50,7 +52,7 @@ export function useLedger() {
         status: 'pending',
         raw: t.raw,
       }));
-      setTransactions(prev => [...prev, ...newTxs]);
+      setTransactions((prev) => [...prev, ...newTxs]);
       return newTxs.length;
     } catch (e) {
       console.error('PDF parsing error:', e);
@@ -68,7 +70,7 @@ export function useLedger() {
       thumbnailUrl: URL.createObjectURL(file),
       createdAt: new Date().toISOString(),
     };
-    setReceipts(prev => [...prev, receipt]);
+    setReceipts((prev) => [...prev, receipt]);
     return receipt;
   }, []);
 
@@ -81,16 +83,15 @@ export function useLedger() {
       createdAt: new Date().toISOString(),
     };
 
-    setReceipts(prev => [...prev, receipt]);
+    setReceipts((prev) => [...prev, receipt]);
 
-    // Scan file content for amounts (OCR for images, text extraction for PDFs)
     let scannedAmounts: number[] = [];
     try {
-      scannedAmounts = await scanReceiptForAmounts(file, (p) => setScanProgress(p));
+      scannedAmounts = await scanReceiptForAmounts(file, (progress) => setScanProgress(progress));
       setScanProgress(null);
       if (scannedAmounts.length > 0) {
         console.log(`[Receipt] Scanned amounts from ${file.name}:`, scannedAmounts);
-        toast.info(`Montants détectés: ${scannedAmounts.map(a => a.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })).join(', ')}`);
+        toast.info(`Montants détectés: ${scannedAmounts.map((amount) => amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })).join(', ')}`);
       }
     } catch (e) {
       console.error('[Receipt] OCR scan failed:', e);
@@ -99,33 +100,46 @@ export function useLedger() {
 
     let bankMatchResult: ReturnType<typeof autoReconcile> | null = null;
 
-    setTransactions(prev => {
+    setTransactions((prev) => {
       const result = autoReconcile(receipt, prev, scannedAmounts);
       bankMatchResult = result;
 
       if (result.transactionId && result.confidence === 'high') {
         receipt.linkedTransactionId = result.transactionId;
-        setReceipts(r => r.map(rc =>
-          rc.id === receipt.id ? { ...rc, linkedTransactionId: result.transactionId! } : rc
+        setReceipts((currentReceipts) => currentReceipts.map((currentReceipt) =>
+          currentReceipt.id === receipt.id ? { ...currentReceipt, linkedTransactionId: result.transactionId! } : currentReceipt
         ));
+
         toast.success(`✅ Auto-rapproché: ${file.name}`, { description: result.note });
-        return prev.map(t =>
-          t.id === result.transactionId
-            ? { ...t, status: 'auto-matched' as const, receiptId: receipt.id, reconciliationNote: result.note }
-            : t
-        );
-      } else if (result.transactionId && result.confidence === 'medium') {
-        toast.info(`🔍 Correspondance probable pour ${file.name}`, { description: result.note + ' — Cliquez sur la transaction pour confirmer.' });
-        return prev.map(t =>
-          t.id === result.transactionId
-            ? { ...t, reconciliationNote: result.note }
-            : t
-        );
+
+        return prev.map((transaction) => {
+          if (transaction.id !== result.transactionId) return transaction;
+          const updated = {
+            ...transaction,
+            status: 'auto-matched' as const,
+            receiptId: receipt.id,
+            reconciliationNote: result.note,
+            validationComment: undefined,
+          };
+          syncSelectedTransaction(updated);
+          return updated;
+        });
       }
+
+      if (result.transactionId && result.confidence === 'medium') {
+        toast.info(`🔍 Correspondance probable pour ${file.name}`, { description: `${result.note} — Cliquez sur la transaction pour confirmer.` });
+        return prev.map((transaction) => {
+          if (transaction.id !== result.transactionId) return transaction;
+          const updated = { ...transaction, reconciliationNote: result.note };
+          syncSelectedTransaction(updated);
+          return updated;
+        });
+      }
+
       return prev;
     });
 
-    if (bankMatchResult && (bankMatchResult as any).confidence !== 'none') {
+    if (bankMatchResult && bankMatchResult.confidence !== 'none') {
       return 'matched';
     }
 
@@ -140,7 +154,7 @@ export function useLedger() {
         note: 'Auto-détecté depuis le justificatif',
         createdAt: new Date().toISOString(),
       };
-      setPersonalExpenses(prev => [...prev, newExpense]);
+      setPersonalExpenses((prev) => [...prev, newExpense]);
       toast.success(`💰 Dépense personnelle détectée: ${newExpense.merchant}`, {
         description: `${newExpense.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} — ${newExpense.date}`,
       });
@@ -151,25 +165,66 @@ export function useLedger() {
       description: 'Aucune correspondance bancaire ni dépense personnelle détectée. Ajoutez manuellement.',
     });
     return 'unrecognized';
-  }, []);
+  }, [syncSelectedTransaction]);
 
   const linkReceiptToTransaction = useCallback((receiptId: string, transactionId: string) => {
-    setReceipts(prev => prev.map(r =>
-      r.id === receiptId ? { ...r, linkedTransactionId: transactionId } : r
+    setReceipts((prev) => prev.map((receipt) =>
+      receipt.id === receiptId ? { ...receipt, linkedTransactionId: transactionId } : receipt
     ));
-    setTransactions(prev => prev.map(t =>
-      t.id === transactionId ? { ...t, status: 'matched' as const, receiptId, reconciliationNote: 'Rapprochement manuel' } : t
-    ));
-  }, []);
+    setTransactions((prev) => prev.map((transaction) => {
+      if (transaction.id !== transactionId) return transaction;
+      const updated = {
+        ...transaction,
+        status: 'matched' as const,
+        receiptId,
+        reconciliationNote: 'Rapprochement manuel',
+        validationComment: undefined,
+      };
+      syncSelectedTransaction(updated);
+      return updated;
+    }));
+  }, [syncSelectedTransaction]);
 
   const unlinkReceipt = useCallback((transactionId: string) => {
-    setTransactions(prev => prev.map(t =>
-      t.id === transactionId ? { ...t, status: 'pending' as const, receiptId: undefined, reconciliationNote: undefined } : t
+    setTransactions((prev) => prev.map((transaction) => {
+      if (transaction.id !== transactionId) return transaction;
+      const updated = {
+        ...transaction,
+        status: 'pending' as const,
+        receiptId: undefined,
+        reconciliationNote: undefined,
+        validationComment: undefined,
+      };
+      syncSelectedTransaction(updated);
+      return updated;
+    }));
+    setReceipts((prev) => prev.map((receipt) =>
+      receipt.linkedTransactionId === transactionId ? { ...receipt, linkedTransactionId: undefined } : receipt
     ));
-    setReceipts(prev => prev.map(r =>
-      r.linkedTransactionId === transactionId ? { ...r, linkedTransactionId: undefined } : r
+  }, [syncSelectedTransaction]);
+
+  const validateTransactionWithoutReceipt = useCallback((transactionId: string, comment: string) => {
+    const cleanComment = comment.trim();
+    if (!cleanComment) return;
+
+    setTransactions((prev) => prev.map((transaction) => {
+      if (transaction.id !== transactionId) return transaction;
+      const updated = {
+        ...transaction,
+        status: 'matched' as const,
+        receiptId: undefined,
+        validationComment: cleanComment,
+      };
+      syncSelectedTransaction(updated);
+      return updated;
+    }));
+
+    setReceipts((prev) => prev.map((receipt) =>
+      receipt.linkedTransactionId === transactionId ? { ...receipt, linkedTransactionId: undefined } : receipt
     ));
-  }, []);
+
+    toast.success('Transaction validée sans justificatif');
+  }, [syncSelectedTransaction]);
 
   const addPersonalExpense = useCallback((expense: Omit<PersonalExpense, 'id' | 'createdAt'>) => {
     const newExpense: PersonalExpense = {
@@ -177,37 +232,38 @@ export function useLedger() {
       id: generateId(),
       createdAt: new Date().toISOString(),
     };
-    setPersonalExpenses(prev => [...prev, newExpense]);
+    setPersonalExpenses((prev) => [...prev, newExpense]);
     return newExpense;
   }, []);
 
   const removeTransaction = useCallback((id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-    setReceipts(prev => prev.map(r =>
-      r.linkedTransactionId === id ? { ...r, linkedTransactionId: undefined } : r
+    setTransactions((prev) => prev.filter((transaction) => transaction.id !== id));
+    setReceipts((prev) => prev.map((receipt) =>
+      receipt.linkedTransactionId === id ? { ...receipt, linkedTransactionId: undefined } : receipt
     ));
+    setSelectedTransaction((prev) => (prev?.id === id ? null : prev));
   }, []);
 
   const removePersonalExpense = useCallback((id: string) => {
-    setPersonalExpenses(prev => prev.filter(e => e.id !== id));
+    setPersonalExpenses((prev) => prev.filter((expense) => expense.id !== id));
   }, []);
 
   const clearAll = useCallback(() => {
     setTransactions([]);
     setReceipts([]);
     setPersonalExpenses([]);
+    setSelectedTransaction(null);
     localStorage.clear();
   }, []);
 
   const importFromExcelData = useCallback((data: { transactions: Transaction[]; personalExpenses: PersonalExpense[] }) => {
-    setTransactions(prev => [...prev, ...data.transactions]);
-    setPersonalExpenses(prev => [...prev, ...data.personalExpenses]);
+    setTransactions((prev) => [...prev, ...data.transactions]);
+    setPersonalExpenses((prev) => [...prev, ...data.personalExpenses]);
   }, []);
 
-  // Filter by month
   const monthFiltered = useMemo(() => {
     if (!selectedMonth) return transactions;
-    return transactions.filter(tx => {
+    return transactions.filter((tx) => {
       const m = tx.date.match(/(\d{2})[\/.](\d{2})[\/.](\d{2,4})/);
       if (m) {
         const year = m[3].length === 2 ? `20${m[3]}` : m[3];
@@ -219,27 +275,26 @@ export function useLedger() {
     });
   }, [transactions, selectedMonth]);
 
-  // Filter by status/type
-  const filteredTransactions = monthFiltered.filter(t => {
+  const filteredTransactions = monthFiltered.filter((transaction) => {
     if (filter === 'all') return true;
-    if (filter === 'credit') return t.type === 'credit';
-    if (filter === 'debit') return t.type === 'debit';
-    if (filter === 'matched') return t.status === 'matched' || t.status === 'auto-matched';
-    return t.status === filter;
+    if (filter === 'credit') return transaction.type === 'credit';
+    if (filter === 'debit') return transaction.type === 'debit';
+    if (filter === 'matched') return transaction.status === 'matched' || transaction.status === 'auto-matched';
+    return transaction.status === filter;
   });
 
   const stats = {
     total: monthFiltered.length,
-    pending: monthFiltered.filter(t => t.status === 'pending').length,
-    matched: monthFiltered.filter(t => t.status === 'matched' || t.status === 'auto-matched').length,
-    autoMatched: monthFiltered.filter(t => t.status === 'auto-matched').length,
+    pending: monthFiltered.filter((transaction) => transaction.status === 'pending').length,
+    matched: monthFiltered.filter((transaction) => transaction.status === 'matched' || transaction.status === 'auto-matched').length,
+    autoMatched: monthFiltered.filter((transaction) => transaction.status === 'auto-matched').length,
     personal: personalExpenses.length,
-    credit: monthFiltered.filter(t => t.type === 'credit').length,
-    debit: monthFiltered.filter(t => t.type === 'debit').length,
-    creditAmount: monthFiltered.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0),
-    debitAmount: monthFiltered.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0),
-    pendingAmount: monthFiltered.filter(t => t.status === 'pending').reduce((s, t) => s + t.amount, 0),
-    unmatchedReceipts: receipts.filter(r => !r.linkedTransactionId).length,
+    credit: monthFiltered.filter((transaction) => transaction.type === 'credit').length,
+    debit: monthFiltered.filter((transaction) => transaction.type === 'debit').length,
+    creditAmount: monthFiltered.filter((transaction) => transaction.type === 'credit').reduce((sum, transaction) => sum + transaction.amount, 0),
+    debitAmount: monthFiltered.filter((transaction) => transaction.type === 'debit').reduce((sum, transaction) => sum + transaction.amount, 0),
+    pendingAmount: monthFiltered.filter((transaction) => transaction.status === 'pending').reduce((sum, transaction) => sum + transaction.amount, 0),
+    unmatchedReceipts: receipts.filter((receipt) => !receipt.linkedTransactionId).length,
   };
 
   return {
@@ -262,6 +317,7 @@ export function useLedger() {
     addReceiptWithAutoReconcile,
     linkReceiptToTransaction,
     unlinkReceipt,
+    validateTransactionWithoutReceipt,
     addPersonalExpense,
     removeTransaction,
     removePersonalExpense,

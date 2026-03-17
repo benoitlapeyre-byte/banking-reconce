@@ -43,7 +43,6 @@ const Index = () => {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
       <aside className="w-[280px] border-r flex flex-col flex-shrink-0">
         <div className="px-5 py-4 border-b">
           <h1 className="text-lg font-semibold tracking-tight">Ledge</h1>
@@ -106,7 +105,6 @@ const Index = () => {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="flex items-center justify-between px-5 py-3 border-b flex-shrink-0">
           <div>
@@ -139,7 +137,7 @@ const Index = () => {
                 accept=".pdf"
                 className="hidden"
                 multiple
-                onChange={e => {
+                onChange={(e) => {
                   if (e.target.files) handleImportStatement(Array.from(e.target.files));
                   e.target.value = '';
                 }}
@@ -218,14 +216,13 @@ const Index = () => {
               </div>
 
               {(() => {
-                // Exclude personal expenses whose receipt is linked to a bank transaction
                 const reconciledReceiptIds = new Set(
                   ledger.receipts
-                    .filter(r => r.linkedTransactionId)
-                    .map(r => r.id)
+                    .filter((receipt) => receipt.linkedTransactionId)
+                    .map((receipt) => receipt.id)
                 );
                 const unreconciledExpenses = ledger.personalExpenses.filter(
-                  e => !e.receiptId || !reconciledReceiptIds.has(e.receiptId)
+                  (expense) => !expense.receiptId || !reconciledReceiptIds.has(expense.receiptId)
                 );
                 return unreconciledExpenses.length > 0 ? (
                   <div className="px-5">
@@ -276,6 +273,7 @@ const Index = () => {
         onClose={() => ledger.setSelectedTransaction(null)}
         onAddReceipt={ledger.addReceipt}
         onLinkReceipt={ledger.linkReceiptToTransaction}
+        onValidateWithoutReceipt={ledger.validateTransactionWithoutReceipt}
       />
 
       <PersonalExpensePanel
