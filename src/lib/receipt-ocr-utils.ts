@@ -194,6 +194,50 @@ function extractAmountTokens(line: string, allowIntegerFallback: boolean): strin
   return [...results];
 }
 
+function extractKeywordAmountCandidates(line: string): Array<{ amount: number; score: number; preserveOnNegativeLine?: boolean }> {
+  const contexts = [
+    { pattern: STRONG_TOTAL_KEYWORDS, score: 14, preserveOnNegativeLine: true },
+    { pattern: /montant\s*t\.?t\.?c\.?|\bt\.?t\.?c\.?\b/i, score: 12, preserveOnNegativeLine: true },
+    { pattern: /mode\s+de\s+r[èe]glement|r[èe]glement|\bcb\b|carte|visa|mastercard|debit|débit/i, score: 11, preserveOnNegativeLine: true },
+    { pattern: /\btotal\b|net\s*[àa]\s*payer|[àa]\s*payer|montant\s+total/i, score: 9, preserveOnNegativeLine: false },
+  ];
+
+  const candidates: Array<{ amount: number; score: number; preserveOnNegativeLine?: boolean }> = [];
+
+  for (const context of contexts) {
+    const match = line.match(context.pattern);
+    if (!match || match.index === undefined) continue;
+
+    const tail = line.slice(match.index);
+    const amounts = extractAmountTokens(tail, true)
+      .map((token) => parseAmount(token))
+      .filter((amount) => isPlausibleAmount(amount));
+
+    if (amounts.length === 0) continue;
+
+    const preferred = choosePreferredKeywordAmount(line, amounts);
+    candidates.push({ amount: preferred, score: context.score, preserveOnNegativeLine: context.preserveOnNegativeLine });
+  }
+
+  return candidates;
+}
+
+function choosePreferredKeywordAmount(line: string, amounts: number[]): number {
+  if (/mode\s+de\s+r[èe]glement|r[èe]glement|\bcb\b|carte|visa|mastercard|debit|débit/i.test(line)) {
+    return amounts[amounts.length - 1];
+  }
+
+  return Math.max(...amounts);
+}
+
+function normalizeDateLine(line: string): string {
+  return line
+    .replace(/[Oo](?=\d)/g, '0')
+    .replace(/(?<=\d)[Oo]/g, '0')
+    .replace(/[Il|](?=\d)/g, '1')
+    .replace(/(?<=\d)[Il|]/g, '1');
+}
+
 function parseAmount(value: string): number {
   let str = value
     .replace(/[Oo](?=\d)/g, '0')
