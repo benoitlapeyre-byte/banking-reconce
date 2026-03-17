@@ -51,9 +51,9 @@ function extractAmountsFromFilename(filename: string): number[] {
     }
   }
 
-  // Pattern 3: plain integers as fallback
-  if (amounts.length === 0) {
-    const intPattern = /(?<!\d)(\d{2,})(?!\d)/g;
+  // Pattern 3: plain integers as fallback, but only for realistic expense amounts
+  if (amounts.length === 0 && !isLikelyCameraFilename(nameWithoutExt)) {
+    const intPattern = /(?<!\d)(\d{1,4})(?!\d)/g;
     while ((match = intPattern.exec(nameWithoutExt)) !== null) {
       const val = parseFloat(match[1]);
       if (!isNaN(val) && val > 0 && !(val >= 1900 && val <= 2100)) {
@@ -160,7 +160,9 @@ export function autoReconcile(
  */
 export function extractPersonalExpenseFromFilename(filename: string): Partial<Omit<PersonalExpense, 'id' | 'createdAt'>> | null {
   const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
-  
+
+  if (isLikelyCameraFilename(nameWithoutExt)) return null;
+
   const amounts = extractAmountsFromFilename(nameWithoutExt);
   if (amounts.length === 0) return null;
 
@@ -170,7 +172,7 @@ export function extractPersonalExpenseFromFilename(filename: string): Partial<Om
     /(\d{2}[-_]\d{2}[-_]\d{4})/,
     /(\d{2}[-_]\d{2}[-_]\d{2})(?!\d)/,
   ];
-  
+
   let extractedDate: string | undefined;
   for (const dp of datePatterns) {
     const m = dp.exec(nameWithoutExt);
@@ -189,26 +191,31 @@ export function extractPersonalExpenseFromFilename(filename: string): Partial<Om
     }
   }
 
-  // Extract merchant name
   let merchantPart = nameWithoutExt
     .replace(/\d{4}[-_]\d{2}[-_]\d{2}/g, '')
     .replace(/\d{2}[-_]\d{2}[-_]\d{4}/g, '')
     .replace(/\d{2}[-_]\d{2}[-_]\d{2}/g, '')
     .replace(/\d{1,3}(?:[\s_]\d{3})*[.,]\d{2}/g, '')
-    .replace(/\d{3,}/g, '')
+    .replace(/\d{1,4}/g, '')
     .replace(/^(facture|recu|ticket|note|justificatif|receipt|invoice)[-_\s]*/i, '')
     .replace(/[-_]+/g, ' ')
     .trim();
 
-  if (merchantPart.length < 2) {
-    merchantPart = nameWithoutExt.replace(/[-_]+/g, ' ').replace(/\.\w+$/, '').trim();
+  if (merchantPart.length < 3 || !/[A-Za-zÀ-ÿ]{3,}/.test(merchantPart)) {
+    return null;
   }
 
   merchantPart = merchantPart.charAt(0).toUpperCase() + merchantPart.slice(1);
 
   return {
-    merchant: merchantPart || 'Dépense personnelle',
+    merchant: merchantPart,
     amount: amounts[0],
     date: extractedDate || new Date().toISOString().slice(0, 10),
   };
+}
+
+function isLikelyCameraFilename(filename: string): boolean {
+  return /^(?:img|dsc|pxl|mvimg|scan|photo|image|document|whatsapp(?:\s+image)?|signal|received)[-_\s]?/i.test(filename)
+    || /\b\d{8}[_-]\d{6}\b/.test(filename)
+    || /^[\d_-]{8,}$/.test(filename);
 }

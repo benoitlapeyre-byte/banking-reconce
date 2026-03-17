@@ -51,6 +51,8 @@ export function normalizeReceiptText(text: string): string {
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[|¦]/g, ' ')
+    .replace(/[–—]/g, '-')
     .replace(/[•·]/g, '.')
     .split('\n')
     .map((line) => line.replace(/\s+/g, ' ').trim())
@@ -71,19 +73,13 @@ export function extractAmountsFromReceiptText(text: string): number[] {
     const hasStrongKeywords = STRONG_TOTAL_KEYWORDS.test(line);
     const hasNegativeKeywords = NEGATIVE_AMOUNT_KEYWORDS.test(line);
 
-    const explicitPatterns = [
-      /(?:total\s*t\.?t\.?c\.?|montant\s*t\.?t\.?c\.?|t\.?t\.?c\.?|net\s*[àa]\s*payer|total\s*[àa]\s*payer|montant\s*total|total\s*g[ée]n[ée]ral)\D{0,12}([€$£¥]?\s*\d[\d\s.,]*\d|[€$£¥]?\s*\d+)/i,
-      /([€$£¥]?\s*\d[\d\s.,]*\d|[€$£¥]?\s*\d+)\s*(?:€|eur)?\s*(?:t\.?t\.?c\.?|total)/i,
-    ];
-
-    for (const pattern of explicitPatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        const amount = parseAmount(match[1]);
-        if (isPlausibleAmount(amount)) {
-          candidates.push({ amount, score: 12 });
-        }
-      }
+    for (const candidate of extractKeywordAmountCandidates(line)) {
+      let score = candidate.score;
+      if (hasCurrency) score += 2;
+      if (hasStrongKeywords) score += 4;
+      else if (hasPositiveKeywords) score += 2;
+      if (hasNegativeKeywords && !candidate.preserveOnNegativeLine) score -= 4;
+      candidates.push({ amount: candidate.amount, score });
     }
 
     const tokens = extractAmountTokens(line, hasCurrency || hasPositiveKeywords || hasStrongKeywords);
@@ -98,6 +94,8 @@ export function extractAmountsFromReceiptText(text: string): number[] {
       if (hasNegativeKeywords) score -= 6;
       if (/([€$£¥]?\s*\d[\d\s.,]*\d|[€$£¥]?\s*\d+)\s*(?:€|eur)?\s*$/i.test(line)) score += 1;
       if (amount >= 1 && amount <= 5000) score += 1;
+      if (amount < 2) score -= 2;
+      if (amount <= 0.2) score -= 4;
       candidates.push({ amount, score });
     }
   }
@@ -127,23 +125,35 @@ export function extractDateFromReceiptText(text: string): string | null {
     .filter(Boolean);
 
   const candidates: DateCandidate[] = [];
+  const writtenPattern = new RegExp(`(?:^|\\D)(\\d{1,2})(?:er)?\\s+(${Object.keys(FRENCH_MONTHS).join('|')})\\s+(\\d{2,4})(?!\\d)`, 'ig');
 
-  for (const [index, line] of lines.entries()) {
-    const baseScore = (DATE_KEYWORDS.test(line) ? 6 : 0) + (index < 8 ? 3 : 0);
+  for (const [index, rawLine] of lines.entries()) {
+    const line = normalizeDateLine(rawLine);
+    let baseScore = (DATE_KEYWORDS.test(line) ? 6 : 0) + (index < 8 ? 3 : 0);
 
-    const euMatches = [...line.matchAll(/(?:^|\D)(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?!\d)/g)];
+    if (/date\s*(?:de|du)?\s*(?:facture|ticket|achat|commande)?/i.test(line)) baseScore += 6;
+    if (/facture|ticket/i.test(line)) baseScore += 2;
+
+    const euMatches = [...line.matchAll(/(?:^|\D)(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})(?!\d)/g)];
     for (const match of euMatches) {
       const iso = toIsoDate(match[1], match[2], match[3]);
-      if (iso) candidates.push({ value: iso, score: baseScore + 4 });
+      if (iso) candidates.push({ value: iso, score: baseScore + 5 });
     }
 
-    const isoMatches = [...line.matchAll(/(?:^|\D)(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(?!\d)/g)];
+    const isoMatches = [...line.matchAll(/(?:^|\D)(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})(?!\d)/g)];
     for (const match of isoMatches) {
       const iso = toIsoDate(match[3], match[2], match[1]);
       if (iso) candidates.push({ value: iso, score: baseScore + 4 });
     }
 
-    const writtenPattern = new RegExp(`(?:^|\\D)(\\d{1,2})(?:er)?\\s+(${Object.keys(FRENCH_MONTHS).join('|')})\\s+(\\d{2,4})(?!\\d)`, 'ig');
+    if (DATE_KEYWORDS.test(line)) {
+      const spacedMatches = [...line.matchAll(/(?:^|\D)(\d{1,2})\s+(\d{1,2})\s+(\d{2,4})(?!\d)/g)];
+      for (const match of spacedMatches) {
+        const iso = toIsoDate(match[1], match[2], match[3]);
+        if (iso) candidates.push({ value: iso, score: baseScore + 2 });
+      }
+    }
+
     for (const match of line.matchAll(writtenPattern)) {
       const month = FRENCH_MONTHS[match[2].toLowerCase()];
       const iso = month ? toIsoDate(match[1], month, match[3]) : null;
@@ -172,7 +182,7 @@ function extractAmountTokens(line: string, allowIntegerFallback: boolean): strin
     results.add(match.trim());
   }
 
-  if (allowIntegerFallback) {
+  if (allowIntegerFallback && results.size === 0) {
     const integerPattern = /(?:€\s*)?\d{1,5}(?:\s*€)?/g;
     for (const match of line.match(integerPattern) ?? []) {
       const cleaned = match.trim();
@@ -182,6 +192,50 @@ function extractAmountTokens(line: string, allowIntegerFallback: boolean): strin
   }
 
   return [...results];
+}
+
+function extractKeywordAmountCandidates(line: string): Array<{ amount: number; score: number; preserveOnNegativeLine?: boolean }> {
+  const contexts = [
+    { pattern: STRONG_TOTAL_KEYWORDS, score: 14, preserveOnNegativeLine: true },
+    { pattern: /montant\s*t\.?t\.?c\.?|\bt\.?t\.?c\.?\b/i, score: 12, preserveOnNegativeLine: true },
+    { pattern: /mode\s+de\s+r[èe]glement|r[èe]glement|\bcb\b|carte|visa|mastercard|debit|débit/i, score: 11, preserveOnNegativeLine: true },
+    { pattern: /\btotal\b|net\s*[àa]\s*payer|[àa]\s*payer|montant\s+total/i, score: 9, preserveOnNegativeLine: false },
+  ];
+
+  const candidates: Array<{ amount: number; score: number; preserveOnNegativeLine?: boolean }> = [];
+
+  for (const context of contexts) {
+    const match = line.match(context.pattern);
+    if (!match || match.index === undefined) continue;
+
+    const tail = line.slice(match.index);
+    const amounts = extractAmountTokens(tail, true)
+      .map((token) => parseAmount(token))
+      .filter((amount) => isPlausibleAmount(amount));
+
+    if (amounts.length === 0) continue;
+
+    const preferred = choosePreferredKeywordAmount(line, amounts);
+    candidates.push({ amount: preferred, score: context.score, preserveOnNegativeLine: context.preserveOnNegativeLine });
+  }
+
+  return candidates;
+}
+
+function choosePreferredKeywordAmount(line: string, amounts: number[]): number {
+  if (/mode\s+de\s+r[èe]glement|r[èe]glement|\bcb\b|carte|visa|mastercard|debit|débit/i.test(line)) {
+    return amounts[amounts.length - 1];
+  }
+
+  return Math.max(...amounts);
+}
+
+function normalizeDateLine(line: string): string {
+  return line
+    .replace(/[Oo](?=\d)/g, '0')
+    .replace(/(?<=\d)[Oo]/g, '0')
+    .replace(/[Il|](?=\d)/g, '1')
+    .replace(/(?<=\d)[Il|]/g, '1');
 }
 
 function parseAmount(value: string): number {
