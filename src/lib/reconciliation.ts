@@ -217,5 +217,5 @@ export function extractPersonalExpenseFromFilename(filename: string): Partial<Om
 function isLikelyCameraFilename(filename: string): boolean {
   return /^(?:img|dsc|pxl|mvimg|scan|photo|image|document|whatsapp(?:\s+image)?|signal|received)[-_\s]?/i.test(filename)
     || /\b\d{8}[_-]\d{6}\b/.test(filename)
-    || /^\d{8,}$/.test(filename.replace(/\D/g, ''));
+    || /^[\d_-]{8,}$/.test(filename);
 }

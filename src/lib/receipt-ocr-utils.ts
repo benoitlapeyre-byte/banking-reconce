@@ -182,7 +182,7 @@ function extractAmountTokens(line: string, allowIntegerFallback: boolean): strin
     results.add(match.trim());
   }
 
-  if (allowIntegerFallback) {
+  if (allowIntegerFallback && results.size === 0) {
     const integerPattern = /(?:€\s*)?\d{1,5}(?:\s*€)?/g;
     for (const match of line.match(integerPattern) ?? []) {
       const cleaned = match.trim();
