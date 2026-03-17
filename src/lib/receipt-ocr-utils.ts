@@ -125,23 +125,35 @@ export function extractDateFromReceiptText(text: string): string | null {
     .filter(Boolean);
 
   const candidates: DateCandidate[] = [];
+  const writtenPattern = new RegExp(`(?:^|\\D)(\\d{1,2})(?:er)?\\s+(${Object.keys(FRENCH_MONTHS).join('|')})\\s+(\\d{2,4})(?!\\d)`, 'ig');
 
-  for (const [index, line] of lines.entries()) {
-    const baseScore = (DATE_KEYWORDS.test(line) ? 6 : 0) + (index < 8 ? 3 : 0);
+  for (const [index, rawLine] of lines.entries()) {
+    const line = normalizeDateLine(rawLine);
+    let baseScore = (DATE_KEYWORDS.test(line) ? 6 : 0) + (index < 8 ? 3 : 0);
 
-    const euMatches = [...line.matchAll(/(?:^|\D)(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?!\d)/g)];
+    if (/date\s*(?:de|du)?\s*(?:facture|ticket|achat|commande)?/i.test(line)) baseScore += 6;
+    if (/facture|ticket/i.test(line)) baseScore += 2;
+
+    const euMatches = [...line.matchAll(/(?:^|\D)(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})(?!\d)/g)];
     for (const match of euMatches) {
       const iso = toIsoDate(match[1], match[2], match[3]);
-      if (iso) candidates.push({ value: iso, score: baseScore + 4 });
+      if (iso) candidates.push({ value: iso, score: baseScore + 5 });
     }
 
-    const isoMatches = [...line.matchAll(/(?:^|\D)(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(?!\d)/g)];
+    const isoMatches = [...line.matchAll(/(?:^|\D)(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})(?!\d)/g)];
     for (const match of isoMatches) {
       const iso = toIsoDate(match[3], match[2], match[1]);
       if (iso) candidates.push({ value: iso, score: baseScore + 4 });
     }
 
-    const writtenPattern = new RegExp(`(?:^|\\D)(\\d{1,2})(?:er)?\\s+(${Object.keys(FRENCH_MONTHS).join('|')})\\s+(\\d{2,4})(?!\\d)`, 'ig');
+    if (DATE_KEYWORDS.test(line)) {
+      const spacedMatches = [...line.matchAll(/(?:^|\D)(\d{1,2})\s+(\d{1,2})\s+(\d{2,4})(?!\d)/g)];
+      for (const match of spacedMatches) {
+        const iso = toIsoDate(match[1], match[2], match[3]);
+        if (iso) candidates.push({ value: iso, score: baseScore + 2 });
+      }
+    }
+
     for (const match of line.matchAll(writtenPattern)) {
       const month = FRENCH_MONTHS[match[2].toLowerCase()];
       const iso = month ? toIsoDate(match[1], month, match[3]) : null;
